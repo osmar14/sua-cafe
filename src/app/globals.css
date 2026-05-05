@@ -1,26 +1,25 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+@theme {
+  /* 🌲 Paleta Cálida y Orgánica (Basada en tu Logo) */
+  --color-sua-fondo: #F4EFE6;      /* Crema cálido (Leche vaporizada) */
+  --color-sua-primario: #1B2E20;   /* Verde Bosque Profundo (Extraído de tu logo) */
+  --color-sua-titulos: #3A261D;    /* Café Tostado Oscuro */
+  --color-sua-acentos: #8C6239;    /* Tono Madera / Caramelo */
+  --color-sua-cuerpo: #2D2522;     /* Marrón muy oscuro para textos */
+
+  --font-serif: var(--font-playfair), serif;
+  --font-sans: var(--font-inter), sans-serif;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+@layer base {
+  body {
+    @apply bg-sua-fondo text-sua-cuerpo font-sans antialiased;
+    /* Textura de papel avejentado más cálida */
+    background-image: url("https://www.transparenttextures.com/patterns/cream-paper.png");
   }
-}
-
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  
+  h1, h2, h3, h4 {
+    @apply text-sua-titulos font-serif font-bold tracking-tight;
+  }
 }
