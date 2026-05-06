@@ -11,17 +11,12 @@ export default async function LandingPrincipal() {
   return (
     <main className="relative w-full min-h-screen bg-[#060B08] text-[#CBA36A] font-sans antialiased overflow-x-hidden selection:bg-[#CBA36A] selection:text-[#060B08]">
       
-      {/* 🖼️ FONDO ADAPTATIVO (Corrige la oscuridad en móvil) */}
+      {/* 🖼️ FONDO ADAPTATIVO */}
       <div className="absolute inset-0 z-0 pointer-events-none">
-        {/* VERSIÓN MÓVIL: Forzamos el ancho al 100% y repetimos hacia abajo. Esto evita el zoom oscuro. */}
         <div className="md:hidden absolute inset-0 bg-[url('/bg-bosque.png')] bg-top bg-repeat-y bg-[length:100%_auto] opacity-70 mix-blend-lighten"></div>
-        
-        {/* VERSIÓN ESCRITORIO: Cubre toda el área suavemente */}
         <div className="hidden md:block absolute inset-0">
            <img src="/bg-bosque.png" className="w-full h-full object-cover object-top opacity-50 mix-blend-lighten" alt="Árbol" />
         </div>
-
-        {/* Degradado para fusionar el fondo */}
         <div className="absolute inset-0 bg-gradient-to-b from-[#060B08]/10 via-[#060B08]/70 to-[#060B08]"></div>
       </div>
 
@@ -83,7 +78,7 @@ export default async function LandingPrincipal() {
           </div>
         </div>
 
-        {/* 🌿 BOTONES DE CATEGORÍA (Medallas Animadas Automáticas) */}
+        {/* 🌿 BOTONES DE CATEGORÍA (Corregidos con IDs exactos) */}
         <div className="text-center mb-12 relative">
           <div className="absolute -top-10 left-1/2 -translate-x-1/2 w-px h-16 bg-gradient-to-b from-[#CBA36A]/50 to-transparent" />
           <span className="text-[10px] font-bold tracking-[0.5em] uppercase opacity-60 block mb-3 text-[#CBA36A]">Nuestra Carta</span>
@@ -92,15 +87,15 @@ export default async function LandingPrincipal() {
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-6 max-w-4xl mx-auto px-2">
           {[
-            { n: 'Caliente', icon: <Coffee size={32} /> },
-            { n: 'Frío', icon: <CupSoda size={32} /> },
-            { n: 'Frappé', icon: <Snowflake size={32} /> },
-            { n: 'Pan', icon: <Croissant size={32} /> }
+            // ⚠️ FIX: Agregamos un 'id' exacto sin acentos para la URL
+            { id: 'caliente', n: 'Caliente', icon: <Coffee size={32} /> },
+            { id: 'frio', n: 'Frío', icon: <CupSoda size={32} /> },
+            { id: 'frappe', n: 'Frappé', icon: <Snowflake size={32} /> },
+            { id: 'pan', n: 'Pan', icon: <Croissant size={32} /> }
           ].map((cat) => (
-            <Link href={`/menu?cat=${cat.n.toLowerCase()}`} key={cat.n} className="group relative aspect-square flex flex-col items-center justify-center bg-[#050A06]/80 backdrop-blur-xl border border-[#CBA36A]/40 rounded-full active:scale-95 transition-all duration-300 shadow-[0_10px_30px_rgba(0,0,0,0.5)] overflow-hidden cursor-pointer">
+            // ⚠️ FIX: Usamos <a> en lugar de <Link> para romper el caché al cambiar de página
+            <a href={`/menu?cat=${cat.id}`} key={cat.n} className="group relative aspect-square flex flex-col items-center justify-center bg-[#050A06]/80 backdrop-blur-xl border border-[#CBA36A]/40 rounded-full active:scale-95 transition-all duration-300 shadow-[0_10px_30px_rgba(0,0,0,0.5)] overflow-hidden cursor-pointer">
               
-              {/* 🎨 EL ANILLO VINTAGE (Gira siempre) */}
-              {/* animate-[spin_15s_linear_infinite] hace que rote permanentemente sin necesidad de ratón */}
               <svg viewBox="0 0 100 100" className="absolute inset-0 w-full h-full text-[#CBA36A] opacity-60 animate-[spin_15s_linear_infinite] pointer-events-none">
                 <circle cx="50" cy="50" r="44" fill="none" stroke="currentColor" strokeWidth="1.5" strokeDasharray="4 6" />
                 <circle cx="50" cy="50" r="38" fill="none" stroke="currentColor" strokeWidth="0.5" />
@@ -110,16 +105,14 @@ export default async function LandingPrincipal() {
                 <path d="M 98 50 L 92 48 L 92 52 Z" fill="currentColor" />
               </svg>
               
-              {/* Icono */}
               <div className="text-[#CBA36A] mb-2 md:group-hover:scale-110 transition-transform duration-300 relative z-10 drop-shadow-[0_0_10px_rgba(203,163,106,0.8)]">
                 {cat.icon}
               </div>
               
-              {/* Texto */}
               <span className="text-[11px] md:text-xs font-black uppercase tracking-widest text-[#CBA36A] relative z-10">
                 {cat.n}
               </span>
-            </Link>
+            </a>
           ))}
         </div>
 
