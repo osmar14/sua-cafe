@@ -5,20 +5,27 @@ import { supabase } from '@/lib/supabase';
 import { 
   ShoppingCart, Coffee, CupSoda, Snowflake, Croissant, 
   X, Check, Star, Trophy, Crown, Gift, Map as MapIcon, 
-  Shield, Compass, Bean, Handshake 
+  Shield, Compass, Bean, Handshake, AlertTriangle, Clock
 } from 'lucide-react';
 
 export default function LandingPrincipal() {
   const [topVentas, setTopVentas] = useState<any[]>([]);
+  const [promosActivas, setPromosActivas] = useState<any[]>([]);
   const [usuario, setUsuario] = useState<any>(null);
   const [mostrarModal, setMostrarModal] = useState(false);
   const [pestanaActiva, setPestanaActiva] = useState<'misiones' | 'rangos'>('misiones');
 
   useEffect(() => {
     async function loadData() {
+      // 1. Cargar Favoritos
       const { data: productos } = await supabase.from('productos').select('*').limit(4);
       setTopVentas(productos || []);
 
+      // 2. Cargar Promociones Activas desde la Base de Datos
+      const { data: promociones } = await supabase.from('promociones').select('*').eq('activa', true).order('created_at', { ascending: false });
+      setPromosActivas(promociones || []);
+
+      // 3. Cargar Usuario
       const phone = localStorage.getItem('sua_user_phone');
       if (phone) {
         const { data: client } = await supabase.from('clientes').select('*').eq('telefono', phone).single();
@@ -34,13 +41,11 @@ export default function LandingPrincipal() {
     { v: 13, premio: "Pan Súa de Cortesía", icon: <Croissant size={16}/> },
     { v: 17, premio: "Café Clásico Gratis", icon: <Coffee size={16}/> },
     { v: 20, premio: "15% Descuento + Sube a Cómplice", icon: <Star size={16} className="text-yellow-500"/> },
-    { v: 36, premio: "Sube a Familia Súa (10% Permanente)", icon: <Crown size={16}/> },
+    { v: 36, premio: "Sube a Familia Súa", icon: <Crown size={16}/> },
     { v: 50, premio: "Taza Oficial Súa", icon: <Gift size={16}/> }
   ];
 
-  // LOGICA BLINDADA DE MEDALLAS Y COLORES
   const getRangoData = (visitas: number, rangoDB: string) => {
-    // Si la DB está vacía, calculamos el rango real por sus visitas
     let rangoReal = rangoDB;
     if (!rangoReal) {
       if (visitas >= 36) rangoReal = 'Familia Súa';
@@ -48,16 +53,11 @@ export default function LandingPrincipal() {
       else if (visitas >= 11) rangoReal = 'Conocedor';
       else rangoReal = 'Explorador';
     }
-
     switch(rangoReal) {
-      case 'Familia Súa': 
-        return { nombre: 'Familia Súa', icon: <Crown size={14} />, color: 'text-yellow-400', bg: 'bg-yellow-500/20', border: 'border-yellow-500', glow: 'from-yellow-400 to-orange-600' };
-      case 'Cómplice': 
-        return { nombre: 'Cómplice', icon: <Handshake size={14} />, color: 'text-[#CBA36A]', bg: 'bg-[#CBA36A]/20', border: 'border-[#CBA36A]', glow: 'from-[#CBA36A] to-yellow-700' };
-      case 'Conocedor': 
-        return { nombre: 'Conocedor', icon: <Bean size={14} />, color: 'text-gray-300', bg: 'bg-gray-400/20', border: 'border-gray-400', glow: 'from-gray-300 to-gray-600' };
-      default: // Explorador
-        return { nombre: 'Explorador', icon: <Compass size={14} />, color: 'text-orange-400', bg: 'bg-orange-500/20', border: 'border-orange-500', glow: 'from-orange-400 to-orange-700' };
+      case 'Familia Súa': return { nombre: 'Familia Súa', icon: <Crown size={14} />, color: 'text-yellow-400', bg: 'bg-yellow-500/20', border: 'border-yellow-500', glow: 'from-yellow-400 to-orange-600' };
+      case 'Cómplice': return { nombre: 'Cómplice', icon: <Handshake size={14} />, color: 'text-[#CBA36A]', bg: 'bg-[#CBA36A]/20', border: 'border-[#CBA36A]', glow: 'from-[#CBA36A] to-yellow-700' };
+      case 'Conocedor': return { nombre: 'Conocedor', icon: <Bean size={14} />, color: 'text-gray-300', bg: 'bg-gray-400/20', border: 'border-gray-400', glow: 'from-gray-300 to-gray-600' };
+      default: return { nombre: 'Explorador', icon: <Compass size={14} />, color: 'text-orange-400', bg: 'bg-orange-500/20', border: 'border-orange-500', glow: 'from-orange-400 to-orange-700' };
     }
   };
 
@@ -68,34 +68,20 @@ export default function LandingPrincipal() {
       
       <div className="absolute inset-0 z-0 pointer-events-none">
         <div className="md:hidden absolute inset-0 bg-[url('/bg-bosque.png')] bg-top bg-repeat-y bg-[length:100%_auto] opacity-70 mix-blend-lighten"></div>
-        <div className="hidden md:block absolute inset-0">
-           <img src="/bg-bosque.png" className="w-full h-full object-cover object-top opacity-50 mix-blend-lighten" alt="Árbol" />
-        </div>
+        <div className="hidden md:block absolute inset-0"><img src="/bg-bosque.png" className="w-full h-full object-cover object-top opacity-50 mix-blend-lighten" alt="Árbol" /></div>
         <div className="absolute inset-0 bg-gradient-to-b from-[#060B08]/10 via-[#060B08]/70 to-[#060B08]"></div>
       </div>
 
-      {/* 🏷️ HEADER CON PASE DE MIEMBRO PREMIUM */}
       <header className="fixed top-0 left-0 w-full z-50 p-4 md:p-6 flex justify-between items-center bg-[#060B08]/90 backdrop-blur-xl border-b border-[#CBA36A]/10 shadow-lg">
         <span className="text-2xl md:text-4xl font-serif font-bold text-[#CBA36A] drop-shadow-md tracking-widest">SÚA</span>
-        
         <div className="flex items-center gap-3 md:gap-8">
-          
-          {/* 🎟️ PASE DE RANGO PERSONALIZADO */}
           {usuario && rd && (
             <button onClick={() => setMostrarModal(true)} className="relative group cursor-pointer active:scale-95 transition-all text-left">
               <div className={`absolute -inset-1 rounded-full blur-md opacity-20 group-hover:opacity-60 transition duration-500 bg-gradient-to-r ${rd.glow}`}></div>
-              
               <div className={`relative flex items-center gap-3 bg-[#0A130D]/90 border ${rd.border}/30 pl-4 pr-1 py-1 rounded-full shadow-2xl`}>
                 <div className="flex flex-col items-end">
-                  <span className="text-base md:text-2xl font-serif font-bold text-white leading-none capitalize">
-                    {usuario.nombre}
-                  </span>
-                  <div className={`flex items-center gap-1 mt-1 px-2 py-0.5 rounded-sm ${rd.bg}`}>
-                    {rd.icon}
-                    <span className={`text-[9px] md:text-[11px] font-black uppercase tracking-widest ${rd.color}`}>
-                      {rd.nombre}
-                    </span>
-                  </div>
+                  <span className="text-base md:text-2xl font-serif font-bold text-white leading-none capitalize">{usuario.nombre}</span>
+                  <div className={`flex items-center gap-1 mt-1 px-2 py-0.5 rounded-sm ${rd.bg}`}>{rd.icon}<span className={`text-[9px] md:text-[11px] font-black uppercase tracking-widest ${rd.color}`}>{rd.nombre}</span></div>
                 </div>
                 <div className={`w-10 h-10 md:w-14 md:h-14 rounded-full flex items-center justify-center border-4 border-[#0A130D] shadow-inner text-[#0A130D] bg-gradient-to-br ${rd.glow}`}>
                   <span className="font-serif font-black text-xl md:text-3xl">{usuario.nombre.charAt(0).toUpperCase()}</span>
@@ -103,17 +89,13 @@ export default function LandingPrincipal() {
               </div>
             </button>
           )}
-
           <Link href="/carrito" className="relative bg-[#CBA36A] p-3 md:px-6 md:py-3 rounded-full text-[#060B08] active:scale-90 transition-all shadow-xl flex items-center gap-2">
-            <ShoppingCart size={20} />
-            <span className="hidden md:inline text-xs font-black uppercase tracking-widest">Cuenta</span>
+            <ShoppingCart size={20} /> <span className="hidden md:inline text-xs font-black uppercase tracking-widest">Cuenta</span>
           </Link>
         </div>
       </header>
 
-      {/* 📜 CONTENIDO PRINCIPAL */}
       <div className="relative z-10 max-w-6xl mx-auto px-6 pt-48 pb-32">
-        
         <div className="flex flex-col items-center mb-24 relative animate-in fade-in zoom-in duration-1000">
           <div className="absolute -top-10 text-[9px] uppercase tracking-[0.4em] text-[#CBA36A]/60 font-bold">Bienvenido al Refugio</div>
           <div className="w-44 h-44 md:w-56 md:h-56 rounded-full overflow-hidden border border-[#CBA36A]/40 shadow-[0_0_60px_rgba(203,163,106,0.3)] bg-[#101C13]">
@@ -122,18 +104,54 @@ export default function LandingPrincipal() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-12 mb-32">
-          {/* Combo Imperial */}
-          <div className="bg-[#050A06]/80 backdrop-blur-xl p-8 md:p-10 rounded-[2.5rem] border border-[#CBA36A]/30 shadow-[0_20px_50px_rgba(0,0,0,0.6)] relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-32 h-32 bg-[#CBA36A]/10 rounded-full blur-3xl pointer-events-none"></div>
-            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-[#CBA36A] opacity-80 mb-2 block">Selección del Barista</span>
-            <h2 className="text-3xl md:text-4xl font-serif mb-6 text-[#CBA36A]">Combo Imperial</h2>
-            <ul className="text-sm text-white/90 space-y-2 border-l-2 border-[#CBA36A]/40 pl-4 mb-8">
-              <li>• Moka Imperial cremoso</li>
-              <li>• Rol de Canela recién horneado</li>
-            </ul>
-            <div className="flex justify-between items-center border-t border-[#CBA36A]/20 pt-6">
-              <span className="text-3xl md:text-4xl font-serif text-white">$90.00</span>
-              <a href="/menu" className="bg-[#CBA36A] text-[#0A130D] px-8 py-3 rounded-full font-black text-[10px] uppercase tracking-widest active:scale-90 transition-transform">Agregar</a>
+          
+          {/* 🎟️ MOTOR DINÁMICO DE PROMOCIONES (Tu Plantilla Maestra) */}
+          <div className="relative overflow-hidden rounded-[2.5rem] shadow-[0_20px_50px_rgba(0,0,0,0.6)]">
+            <div className="flex overflow-x-auto snap-x snap-mandatory hide-scrollbar gap-4">
+              
+              {promosActivas.length > 0 ? promosActivas.map((promo) => (
+                <div key={promo.id} className="min-w-full snap-center bg-[#050A06]/80 backdrop-blur-xl p-8 md:p-10 border border-[#CBA36A]/30 relative flex flex-col h-full rounded-[2.5rem]">
+                  <div className="absolute top-0 right-0 w-32 h-32 bg-[#CBA36A]/10 rounded-full blur-3xl pointer-events-none"></div>
+                  
+                  {/* Etiqueta dinámica de la promo */}
+                  <span className="text-[10px] font-black uppercase tracking-[0.2em] text-[#CBA36A] opacity-80 mb-2 block">
+                    {promo.tipo === 'flash' ? '⚡ Oferta Flash' : promo.tipo === 'condicional' ? '🎓 Promo Especial' : 'Selección del Barista'}
+                  </span>
+                  
+                  <h2 className="text-3xl md:text-4xl font-serif mb-6 text-[#CBA36A]">{promo.titulo}</h2>
+                  
+                  {/* Descripción separada por saltos de línea (como lista) */}
+                  <ul className="text-sm text-white/90 space-y-2 border-l-2 border-[#CBA36A]/40 pl-4 mb-8 flex-1">
+                    {promo.descripcion.split('\n').map((line: string, i: number) => (
+                      <li key={i}>• {line}</li>
+                    ))}
+                  </ul>
+
+                  {/* CAJA DE RESTRICCIÓN (LETRAS CHIQUITAS) */}
+                  {promo.condicion && (
+                    <div className={`mb-6 p-4 rounded-2xl text-[9px] uppercase font-black tracking-widest flex items-center gap-3 border ${promo.tipo === 'flash' ? 'bg-blue-500/10 border-blue-500/30 text-blue-400' : 'bg-orange-500/10 border-orange-500/30 text-orange-400'}`}>
+                      {promo.tipo === 'flash' ? <Clock size={16}/> : <AlertTriangle size={16}/>} 
+                      {promo.condicion}
+                    </div>
+                  )}
+
+                  <div className="flex justify-between items-center border-t border-[#CBA36A]/20 pt-6 mt-auto">
+                    <span className="text-3xl md:text-4xl font-serif text-white">${promo.precio}</span>
+                    <a href="/menu" className="bg-[#CBA36A] text-[#0A130D] px-8 py-3 rounded-full font-black text-[10px] uppercase tracking-widest active:scale-90 transition-transform">Agregar</a>
+                  </div>
+                </div>
+              )) : (
+                /* FALLBACK: Si no tienes promos activas, mostramos el diseño original para que no se vea vacío */
+                <div className="min-w-full snap-center bg-[#050A06]/80 backdrop-blur-xl p-8 md:p-10 border border-[#CBA36A]/30 relative flex flex-col h-full rounded-[2.5rem]">
+                  <div className="absolute top-0 right-0 w-32 h-32 bg-[#CBA36A]/10 rounded-full blur-3xl pointer-events-none"></div>
+                  <span className="text-[10px] font-black uppercase tracking-[0.2em] text-[#CBA36A] opacity-80 mb-2 block">Menú Clásico</span>
+                  <h2 className="text-3xl md:text-4xl font-serif mb-6 text-[#CBA36A]">Café de Altura</h2>
+                  <p className="text-sm text-white/70 flex-1 mb-8">Descubre nuestra carta de bebidas calientes, frappés y panadería artesanal.</p>
+                  <div className="flex justify-end border-t border-[#CBA36A]/20 pt-6 mt-auto">
+                    <a href="/menu" className="bg-[#CBA36A] text-[#0A130D] px-8 py-3 rounded-full font-black text-[10px] uppercase tracking-widest active:scale-90 transition-transform">Ver Menú</a>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
@@ -170,8 +188,6 @@ export default function LandingPrincipal() {
             <a href={`/menu?cat=${cat.id}`} key={cat.n} className="group relative aspect-square flex flex-col items-center justify-center bg-[#050A06]/80 backdrop-blur-xl border border-[#CBA36A]/40 rounded-full active:scale-95 transition-all duration-300 shadow-2xl overflow-hidden cursor-pointer">
               <svg viewBox="0 0 100 100" className="absolute inset-0 w-full h-full text-[#CBA36A] opacity-60 animate-[spin_15s_linear_infinite] pointer-events-none">
                 <circle cx="50" cy="50" r="44" fill="none" stroke="currentColor" strokeWidth="1.5" strokeDasharray="4 6" />
-                <path d="M 50 2 L 52 8 L 48 8 Z" fill="currentColor" />
-                <path d="M 50 98 L 52 92 L 48 92 Z" fill="currentColor" />
               </svg>
               <div className="text-[#CBA36A] mb-2 md:group-hover:scale-110 transition-transform duration-300 relative z-10 drop-shadow-[0_0_10px_rgba(203,163,106,0.8)]">
                 {cat.icon}
@@ -186,10 +202,11 @@ export default function LandingPrincipal() {
         <p className="text-[9px] tracking-[0.5em] uppercase opacity-40">Súa · Refugio y Café · 2026</p>
       </footer>
 
-      {/* 🗺️ MODAL CLUB SÚA */}
+      {/* MODAL CLUB SÚA (Ocultado para no saturar, pero sigue aquí igualito que antes) */}
       {mostrarModal && usuario && rd && (
-        <div className="fixed inset-0 z-[200] flex items-end md:items-center justify-center bg-black/95 backdrop-blur-md animate-in fade-in duration-300 p-4">
-          <div className="bg-[#0A130D] border border-[#CBA36A]/30 w-full max-w-2xl md:rounded-[3rem] rounded-t-[3rem] p-6 md:p-10 relative shadow-[0_0_80px_rgba(203,163,106,0.1)] flex flex-col max-h-[85vh]">
+         <div className="fixed inset-0 z-[200] flex items-end md:items-center justify-center bg-black/95 backdrop-blur-md animate-in fade-in duration-300 p-4">
+           {/* ... Mismo código del modal que ya tienes ... */}
+           <div className="bg-[#0A130D] border border-[#CBA36A]/30 w-full max-w-2xl md:rounded-[3rem] rounded-t-[3rem] p-6 md:p-10 relative shadow-[0_0_80px_rgba(203,163,106,0.1)] flex flex-col max-h-[85vh]">
             <button onClick={() => setMostrarModal(false)} className="absolute top-6 right-6 text-white/40 hover:text-white transition-colors z-10"><X size={28}/></button>
             
             <header className="mb-6 text-center shrink-0">
@@ -264,7 +281,7 @@ export default function LandingPrincipal() {
               )}
             </div>
           </div>
-        </div>
+         </div>
       )}
 
     </main>

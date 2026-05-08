@@ -1,4 +1,5 @@
 'use client';
+import LockScreen from '@/components/LockScreen';
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { 
@@ -120,6 +121,7 @@ export default function FinanzasPage() {
   }
 
   return (
+      <LockScreen titulo="Panel de Finanzas">
     <main className="min-h-screen bg-[#060B08] text-[#CBA36A] p-4 md:p-10 font-sans relative overflow-x-hidden">
       <div className="fixed inset-0 z-0 bg-[url('/bg-bosque.png')] opacity-5 bg-cover pointer-events-none grayscale"></div>
 
@@ -394,5 +396,6 @@ export default function FinanzasPage() {
 
       </div>
     </main>
+  </LockScreen>
   );
 }
