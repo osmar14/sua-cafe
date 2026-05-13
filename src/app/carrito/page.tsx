@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { ArrowLeft, Trash2, CheckCircle, Clock, User, Phone } from 'lucide-react';
+import Link from 'next/link';
 
 export default function CarritoPage() {
   const [carrito, setCarrito] = useState<any[]>([]);
@@ -15,7 +16,6 @@ export default function CarritoPage() {
     const g = localStorage.getItem('sua_carrito');
     if (g) setCarrito(JSON.parse(g));
     
-    // Auto-completar si el usuario ya compró antes (Registro Silencioso)
     const savedName = localStorage.getItem('sua_user_name');
     const savedPhone = localStorage.getItem('sua_user_phone');
     if (savedName) setNombre(savedName);
@@ -29,18 +29,13 @@ export default function CarritoPage() {
     setEnviando(true);
 
     try {
-      // 1. Lógica de Lealtad (Registro Silencioso)
+      // 1. Registro Silencioso (Solo creamos el perfil si es nuevo, NO sumamos visita aquí)
       const { data: clienteExiste } = await supabase.from('clientes').select('*').eq('telefono', telefono).single();
       
-      if (clienteExiste) {
-        // Sumar visita
-        await supabase.from('clientes').update({ visitas: clienteExiste.visitas + 1 }).eq('telefono', telefono);
-      } else {
-        // Crear cliente nuevo
-        await supabase.from('clientes').insert([{ telefono, nombre, visitas: 1 }]);
+      if (!clienteExiste) {
+        await supabase.from('clientes').insert([{ telefono, nombre, visitas: 0 }]);
       }
 
-      // Guardar datos en el celular del cliente para futuras visitas
       localStorage.setItem('sua_user_name', nombre);
       localStorage.setItem('sua_user_phone', telefono);
 
@@ -71,9 +66,10 @@ export default function CarritoPage() {
     <main className="min-h-screen bg-[#060B08] flex flex-col items-center justify-center p-6 text-center">
       <CheckCircle size={80} className="text-[#CBA36A] mb-6 animate-bounce" />
       <h1 className="text-4xl font-serif text-white mb-4">¡Orden Recibida!</h1>
-      <p className="text-white/60 mb-2">Te esperamos a las {hora}.</p>
-      <p className="text-[#CBA36A] text-xs font-bold mb-8 uppercase tracking-widest">+1 Visita a tu Club Súa</p>
-      <a href="/" className="bg-[#CBA36A] text-black px-10 py-4 rounded-full font-black text-xs uppercase tracking-widest">VOLVER AL INICIO</a>
+      <p className="text-white/60 mb-8">Te esperamos a las {hora} para preparar tu café.</p>
+      <Link href="/" className="bg-[#CBA36A] text-black px-10 py-4 rounded-full font-black text-xs uppercase tracking-widest">
+        VOLVER AL INICIO
+      </Link>
     </main>
   );
 
@@ -83,8 +79,8 @@ export default function CarritoPage() {
       
       <div className="relative z-10 max-w-xl mx-auto pt-6">
         <header className="flex justify-between items-center mb-12">
-          <a href="/menu" className="p-2 hover:bg-white/5 rounded-full transition-colors"><ArrowLeft/></a>
-          <h1 className="text-2xl font-serif font-bold text-white tracking-widest">TU CUENTA</h1>
+          <Link href="/menu" className="p-2 hover:bg-white/5 rounded-full transition-colors"><ArrowLeft/></Link>
+          <h1 className="text-2xl font-serif font-bold text-white tracking-widest uppercase">Tu Cuenta</h1>
           <div className="w-10"></div>
         </header>
 
@@ -93,7 +89,7 @@ export default function CarritoPage() {
             carrito.map((item, idx) => (
               <div key={idx} className="bg-[#0A130D] p-5 rounded-2xl border border-[#CBA36A]/20 flex justify-between items-center shadow-lg">
                 <div>
-                  <p className="font-bold text-white">{item.nombre}</p>
+                  <p className="font-bold text-white uppercase text-sm">{item.nombre}</p>
                   <p className="text-[10px] text-[#CBA36A] uppercase tracking-widest mt-1">{item.extras_str}</p>
                 </div>
                 <div className="flex items-center gap-4">
@@ -118,28 +114,28 @@ export default function CarritoPage() {
             <div className="bg-[#0A130D] p-8 rounded-[2.5rem] border border-[#CBA36A]/20 space-y-6 shadow-2xl relative overflow-hidden">
               <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-[#CBA36A]/10 via-[#CBA36A] to-[#CBA36A]/10"></div>
               
-              <h2 className="text-xl font-serif text-white mb-2">Datos de Contacto</h2>
-              <p className="text-[10px] text-white/50 mb-6 uppercase tracking-widest">Acumula puntos Club Súa automáticamente</p>
+              <h2 className="text-xl font-serif text-white mb-2">Datos de Entrega</h2>
+              <p className="text-[10px] text-white/50 mb-6 uppercase tracking-widest font-bold">Sumarás visitas al pagar en caja</p>
               
               <div className="space-y-4">
                 <div className="relative">
                   <User size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#CBA36A]/50" />
-                  <input type="text" placeholder="Tu Nombre" value={nombre} onChange={e=>setNombre(e.target.value)} className="w-full bg-black/40 border border-white/10 py-4 pl-12 pr-4 rounded-xl text-white outline-none focus:border-[#CBA36A] transition-colors" />
+                  <input type="text" placeholder="Tu Nombre" value={nombre} onChange={e=>setNombre(e.target.value)} className="w-full bg-black/40 border border-white/10 py-4 pl-12 pr-4 rounded-xl text-white outline-none focus:border-[#CBA36A]" />
                 </div>
                 
                 <div className="relative">
                   <Phone size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#CBA36A]/50" />
-                  <input type="tel" placeholder="WhatsApp (10 dígitos)" value={telefono} onChange={e=>setTelefono(e.target.value)} className="w-full bg-black/40 border border-white/10 py-4 pl-12 pr-4 rounded-xl text-white outline-none focus:border-[#CBA36A] transition-colors" />
+                  <input type="tel" placeholder="WhatsApp (10 dígitos)" value={telefono} onChange={e=>setTelefono(e.target.value)} className="w-full bg-black/40 border border-white/10 py-4 pl-12 pr-4 rounded-xl text-white outline-none focus:border-[#CBA36A]" />
                 </div>
 
                 <div className="relative">
                   <Clock size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#CBA36A]/50" />
-                  <input type="time" value={hora} onChange={e=>setHora(e.target.value)} className="w-full bg-black/40 border border-white/10 py-4 pl-12 pr-4 rounded-xl text-white outline-none focus:border-[#CBA36A] transition-colors" />
+                  <input type="time" value={hora} onChange={e=>setHora(e.target.value)} className="w-full bg-black/40 border border-white/10 py-4 pl-12 pr-4 rounded-xl text-white outline-none focus:border-[#CBA36A]" />
                 </div>
               </div>
 
               <button onClick={enviarPedido} disabled={enviando} className="w-full bg-[#CBA36A] text-black py-5 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl active:scale-95 transition-all mt-4 disabled:opacity-50">
-                {enviando ? 'PROCESANDO...' : 'CONFIRMAR ORDEN'}
+                {enviando ? 'PROCESANDO...' : 'ENVIAR ORDEN A COCINA'}
               </button>
             </div>
           </>

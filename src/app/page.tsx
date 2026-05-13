@@ -14,26 +14,67 @@ export default function LandingPrincipal() {
   const [usuario, setUsuario] = useState<any>(null);
   const [mostrarModal, setMostrarModal] = useState(false);
   const [pestanaActiva, setPestanaActiva] = useState<'misiones' | 'rangos'>('misiones');
+  
+  // 🔔 ESTADO PARA EL CARRITO Y NOTIFICACIÓN
+  const [cantidadCarrito, setCantidadCarrito] = useState(0);
+  const [notificacion, setNotificacion] = useState<{ visible: boolean, mensaje: string }>({ visible: false, mensaje: '' });
 
   useEffect(() => {
     async function loadData() {
-      // 1. Cargar Favoritos
       const { data: productos } = await supabase.from('productos').select('*').limit(4);
       setTopVentas(productos || []);
 
-      // 2. Cargar Promociones Activas desde la Base de Datos
       const { data: promociones } = await supabase.from('promociones').select('*').eq('activa', true).order('created_at', { ascending: false });
       setPromosActivas(promociones || []);
 
-      // 3. Cargar Usuario
       const phone = localStorage.getItem('sua_user_phone');
       if (phone) {
         const { data: client } = await supabase.from('clientes').select('*').eq('telefono', phone).single();
         if (client) setUsuario(client);
       }
+
+      // Leer cuántos artículos hay en el carrito al cargar la página
+      const guardado = localStorage.getItem('sua_carrito');
+      if (guardado) {
+        const items = JSON.parse(guardado);
+        setCantidadCarrito(items.length);
+      }
     }
     loadData();
+    
+    const sub = supabase.channel('home_realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'productos' }, () => loadData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'promociones' }, () => loadData())
+      .subscribe();
+      
+    return () => { supabase.removeChannel(sub); };
   }, []);
+
+  // --- 🛒 LÓGICA PARA AGREGAR PROMOS AL CARRITO ---
+  const agregarPromoAlCarrito = (promo: any) => {
+    const itemPromo = {
+      id: promo.id,
+      nombre: promo.titulo,
+      precio_venta: promo.precio,
+      precio_final: promo.precio,
+      categoria: 'Promo',
+      extras_str: 'Oferta Especial',
+      id_carrito: Math.random().toString(36).substr(2, 9)
+    };
+
+    const guardado = localStorage.getItem('sua_carrito');
+    const carritoActual = guardado ? JSON.parse(guardado) : [];
+    
+    const nuevoCarrito = [...carritoActual, itemPromo];
+    localStorage.setItem('sua_carrito', JSON.stringify(nuevoCarrito));
+
+    // Actualizar el numerito del carrito al instante
+    setCantidadCarrito(nuevoCarrito.length);
+
+    // Mostrar Notificación Bonita
+    setNotificacion({ visible: true, mensaje: `${promo.titulo} agregado` });
+    setTimeout(() => setNotificacion({ visible: false, mensaje: '' }), 3000);
+  };
 
   const misiones = [
     { v: 5, premio: "5% de Descuento", icon: <Star size={16}/> },
@@ -66,6 +107,11 @@ export default function LandingPrincipal() {
   return (
     <main className="relative w-full min-h-screen bg-[#060B08] text-[#CBA36A] font-sans antialiased overflow-x-hidden selection:bg-[#CBA36A] selection:text-[#060B08]">
       
+      {/* 🔔 LA NOTIFICACIÓN ELEGANTE (Toast) */}
+      <div className={`fixed bottom-10 left-1/2 -translate-x-1/2 z-[200] bg-[#CBA36A] text-[#0A130D] px-8 py-3 rounded-full font-black text-[10px] uppercase tracking-widest shadow-[0_10px_30px_rgba(0,0,0,0.8)] flex items-center gap-2 transition-all duration-500 transform ${notificacion.visible ? 'translate-y-0 opacity-100' : 'translate-y-20 opacity-0 pointer-events-none'}`}>
+        <Check size={16} /> {notificacion.mensaje}
+      </div>
+
       <div className="absolute inset-0 z-0 pointer-events-none">
         <div className="md:hidden absolute inset-0 bg-[url('/bg-bosque.png')] bg-top bg-repeat-y bg-[length:100%_auto] opacity-70 mix-blend-lighten"></div>
         <div className="hidden md:block absolute inset-0"><img src="/bg-bosque.png" className="w-full h-full object-cover object-top opacity-50 mix-blend-lighten" alt="Árbol" /></div>
@@ -74,6 +120,7 @@ export default function LandingPrincipal() {
 
       <header className="fixed top-0 left-0 w-full z-50 p-4 md:p-6 flex justify-between items-center bg-[#060B08]/90 backdrop-blur-xl border-b border-[#CBA36A]/10 shadow-lg">
         <span className="text-2xl md:text-4xl font-serif font-bold text-[#CBA36A] drop-shadow-md tracking-widest">SÚA</span>
+        
         <div className="flex items-center gap-3 md:gap-8">
           {usuario && rd && (
             <button onClick={() => setMostrarModal(true)} className="relative group cursor-pointer active:scale-95 transition-all text-left">
@@ -89,8 +136,16 @@ export default function LandingPrincipal() {
               </div>
             </button>
           )}
-          <Link href="/carrito" className="relative bg-[#CBA36A] p-3 md:px-6 md:py-3 rounded-full text-[#060B08] active:scale-90 transition-all shadow-xl flex items-center gap-2">
-            <ShoppingCart size={20} /> <span className="hidden md:inline text-xs font-black uppercase tracking-widest">Cuenta</span>
+
+          <Link href="/carrito" className="relative bg-[#CBA36A] p-3 md:px-6 md:py-3 rounded-full text-[#060B08] active:scale-90 transition-all shadow-xl flex items-center gap-2 hover:bg-yellow-500">
+            <ShoppingCart size={20} /> 
+            {/* 🔴 EL CONTADOR DINÁMICO */}
+            {cantidadCarrito > 0 && (
+              <span className="absolute -top-1 -right-1 bg-white text-black text-[10px] font-black w-5 h-5 rounded-full flex items-center justify-center border-2 border-[#060B08] animate-in zoom-in">
+                {cantidadCarrito}
+              </span>
+            )}
+            <span className="hidden md:inline text-xs font-black uppercase tracking-widest">Cuenta</span>
           </Link>
         </div>
       </header>
@@ -105,29 +160,24 @@ export default function LandingPrincipal() {
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-12 mb-32">
           
-          {/* 🎟️ MOTOR DINÁMICO DE PROMOCIONES (Tu Plantilla Maestra) */}
+          {/* 🎟️ MOTOR DINÁMICO DE PROMOCIONES */}
           <div className="relative overflow-hidden rounded-[2.5rem] shadow-[0_20px_50px_rgba(0,0,0,0.6)]">
-            <div className="flex overflow-x-auto snap-x snap-mandatory hide-scrollbar gap-4">
+            <div className="flex overflow-x-auto snap-x snap-mandatory hide-scrollbar gap-4 h-full">
               
               {promosActivas.length > 0 ? promosActivas.map((promo) => (
                 <div key={promo.id} className="min-w-full snap-center bg-[#050A06]/80 backdrop-blur-xl p-8 md:p-10 border border-[#CBA36A]/30 relative flex flex-col h-full rounded-[2.5rem]">
                   <div className="absolute top-0 right-0 w-32 h-32 bg-[#CBA36A]/10 rounded-full blur-3xl pointer-events-none"></div>
-                  
-                  {/* Etiqueta dinámica de la promo */}
                   <span className="text-[10px] font-black uppercase tracking-[0.2em] text-[#CBA36A] opacity-80 mb-2 block">
                     {promo.tipo === 'flash' ? '⚡ Oferta Flash' : promo.tipo === 'condicional' ? '🎓 Promo Especial' : 'Selección del Barista'}
                   </span>
-                  
                   <h2 className="text-3xl md:text-4xl font-serif mb-6 text-[#CBA36A]">{promo.titulo}</h2>
                   
-                  {/* Descripción separada por saltos de línea (como lista) */}
                   <ul className="text-sm text-white/90 space-y-2 border-l-2 border-[#CBA36A]/40 pl-4 mb-8 flex-1">
                     {promo.descripcion.split('\n').map((line: string, i: number) => (
                       <li key={i}>• {line}</li>
                     ))}
                   </ul>
 
-                  {/* CAJA DE RESTRICCIÓN (LETRAS CHIQUITAS) */}
                   {promo.condicion && (
                     <div className={`mb-6 p-4 rounded-2xl text-[9px] uppercase font-black tracking-widest flex items-center gap-3 border ${promo.tipo === 'flash' ? 'bg-blue-500/10 border-blue-500/30 text-blue-400' : 'bg-orange-500/10 border-orange-500/30 text-orange-400'}`}>
                       {promo.tipo === 'flash' ? <Clock size={16}/> : <AlertTriangle size={16}/>} 
@@ -137,18 +187,19 @@ export default function LandingPrincipal() {
 
                   <div className="flex justify-between items-center border-t border-[#CBA36A]/20 pt-6 mt-auto">
                     <span className="text-3xl md:text-4xl font-serif text-white">${promo.precio}</span>
-                    <a href="/menu" className="bg-[#CBA36A] text-[#0A130D] px-8 py-3 rounded-full font-black text-[10px] uppercase tracking-widest active:scale-90 transition-transform">Agregar</a>
+                    <button onClick={() => agregarPromoAlCarrito(promo)} className="bg-[#CBA36A] text-[#0A130D] px-8 py-3 rounded-full font-black text-[10px] uppercase tracking-widest active:scale-90 transition-transform">
+                      Agregar
+                    </button>
                   </div>
                 </div>
               )) : (
-                /* FALLBACK: Si no tienes promos activas, mostramos el diseño original para que no se vea vacío */
                 <div className="min-w-full snap-center bg-[#050A06]/80 backdrop-blur-xl p-8 md:p-10 border border-[#CBA36A]/30 relative flex flex-col h-full rounded-[2.5rem]">
                   <div className="absolute top-0 right-0 w-32 h-32 bg-[#CBA36A]/10 rounded-full blur-3xl pointer-events-none"></div>
                   <span className="text-[10px] font-black uppercase tracking-[0.2em] text-[#CBA36A] opacity-80 mb-2 block">Menú Clásico</span>
                   <h2 className="text-3xl md:text-4xl font-serif mb-6 text-[#CBA36A]">Café de Altura</h2>
                   <p className="text-sm text-white/70 flex-1 mb-8">Descubre nuestra carta de bebidas calientes, frappés y panadería artesanal.</p>
                   <div className="flex justify-end border-t border-[#CBA36A]/20 pt-6 mt-auto">
-                    <a href="/menu" className="bg-[#CBA36A] text-[#0A130D] px-8 py-3 rounded-full font-black text-[10px] uppercase tracking-widest active:scale-90 transition-transform">Ver Menú</a>
+                    <Link href="/menu" className="bg-[#CBA36A] text-[#0A130D] px-8 py-3 rounded-full font-black text-[10px] uppercase tracking-widest active:scale-90 transition-transform">Ver Menú</Link>
                   </div>
                 </div>
               )}
@@ -202,27 +253,19 @@ export default function LandingPrincipal() {
         <p className="text-[9px] tracking-[0.5em] uppercase opacity-40">Súa · Refugio y Café · 2026</p>
       </footer>
 
-      {/* MODAL CLUB SÚA (Ocultado para no saturar, pero sigue aquí igualito que antes) */}
+      {/* MODAL CLUB SÚA */}
       {mostrarModal && usuario && rd && (
          <div className="fixed inset-0 z-[200] flex items-end md:items-center justify-center bg-black/95 backdrop-blur-md animate-in fade-in duration-300 p-4">
-           {/* ... Mismo código del modal que ya tienes ... */}
            <div className="bg-[#0A130D] border border-[#CBA36A]/30 w-full max-w-2xl md:rounded-[3rem] rounded-t-[3rem] p-6 md:p-10 relative shadow-[0_0_80px_rgba(203,163,106,0.1)] flex flex-col max-h-[85vh]">
             <button onClick={() => setMostrarModal(false)} className="absolute top-6 right-6 text-white/40 hover:text-white transition-colors z-10"><X size={28}/></button>
-            
             <header className="mb-6 text-center shrink-0">
                <h2 className="text-3xl font-serif text-[#CBA36A] mb-1">Club Súa</h2>
                <p className="text-[10px] uppercase tracking-widest text-white/50">{usuario.nombre} • {usuario.visitas} Visitas Totales</p>
             </header>
-
             <div className="flex bg-white/5 p-1 rounded-full mb-6 shrink-0">
-               <button onClick={() => setPestanaActiva('misiones')} className={`flex-1 py-3 text-[10px] font-black uppercase tracking-widest rounded-full transition-all ${pestanaActiva === 'misiones' ? 'bg-[#CBA36A] text-[#0A130D] shadow-lg' : 'text-white/50 hover:text-white'}`}>
-                 <MapIcon size={14} className="inline mr-1 -mt-0.5" /> Misiones
-               </button>
-               <button onClick={() => setPestanaActiva('rangos')} className={`flex-1 py-3 text-[10px] font-black uppercase tracking-widest rounded-full transition-all ${pestanaActiva === 'rangos' ? 'bg-[#CBA36A] text-[#0A130D] shadow-lg' : 'text-white/50 hover:text-white'}`}>
-                 <Shield size={14} className="inline mr-1 -mt-0.5" /> Niveles
-               </button>
+               <button onClick={() => setPestanaActiva('misiones')} className={`flex-1 py-3 text-[10px] font-black uppercase tracking-widest rounded-full transition-all ${pestanaActiva === 'misiones' ? 'bg-[#CBA36A] text-[#0A130D] shadow-lg' : 'text-white/50 hover:text-white'}`}><MapIcon size={14} className="inline mr-1 -mt-0.5" /> Misiones</button>
+               <button onClick={() => setPestanaActiva('rangos')} className={`flex-1 py-3 text-[10px] font-black uppercase tracking-widest rounded-full transition-all ${pestanaActiva === 'rangos' ? 'bg-[#CBA36A] text-[#0A130D] shadow-lg' : 'text-white/50 hover:text-white'}`}><Shield size={14} className="inline mr-1 -mt-0.5" /> Niveles</button>
             </div>
-
             <div className="overflow-y-auto hide-scrollbar flex-1 pr-2">
               {pestanaActiva === 'misiones' && (
                 <div className="space-y-6 pt-2 pb-8">
@@ -243,9 +286,9 @@ export default function LandingPrincipal() {
                   })}
                 </div>
               )}
-
               {pestanaActiva === 'rangos' && (
                 <div className="space-y-4 pt-2 pb-8">
+                  
                   <div className={`p-5 md:p-6 rounded-2xl border ${rd.nombre === 'Explorador' ? 'bg-gradient-to-br from-orange-500/20 to-transparent border-orange-500' : 'bg-white/5 border-white/10'}`}>
                      <div className="flex justify-between items-center mb-2">
                        <p className="text-xs font-black uppercase text-white flex items-center gap-2"><Compass size={14}/> 🥉 Explorador</p>
@@ -277,13 +320,13 @@ export default function LandingPrincipal() {
                      </div>
                      <p className="text-[10px] md:text-xs text-white/80 leading-relaxed"><span className="text-yellow-400 font-bold">Pase Supremo:</span> 10% de descuento automático en TODAS tus cuentas para siempre y acceso al menú secreto.</p>
                   </div>
+
                 </div>
               )}
             </div>
           </div>
          </div>
       )}
-
     </main>
   );
 }
