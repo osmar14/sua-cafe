@@ -5,35 +5,45 @@ import { supabase } from '@/lib/supabase';
 import { 
   ShoppingCart, Coffee, CupSoda, Snowflake, Croissant, 
   X, Check, Star, Trophy, Crown, Gift, Map as MapIcon, 
-  Shield, Compass, Bean, Handshake, AlertTriangle, Clock
+  Shield, Compass, Bean, Handshake, AlertTriangle, Clock, Lock, Phone
 } from 'lucide-react';
 
 export default function LandingPrincipal() {
   const [topVentas, setTopVentas] = useState<any[]>([]);
   const [promosActivas, setPromosActivas] = useState<any[]>([]);
   const [usuario, setUsuario] = useState<any>(null);
-  const [mostrarModal, setMostrarModal] = useState(false);
+  const [mostrarModalClub, setMostrarModalClub] = useState(false);
+  const [mostrarModalLogin, setMostrarModalLogin] = useState(false); 
   const [pestanaActiva, setPestanaActiva] = useState<'misiones' | 'rangos'>('misiones');
   
-  // 🔔 ESTADO PARA EL CARRITO Y NOTIFICACIÓN
+  const [telefonoInput, setTelefonoInput] = useState('');
+  const [pinInput, setPinInput] = useState('');
+  const [cargandoAuth, setCargandoAuth] = useState(false);
+
   const [cantidadCarrito, setCantidadCarrito] = useState(0);
   const [notificacion, setNotificacion] = useState<{ visible: boolean, mensaje: string }>({ visible: false, mensaje: '' });
 
   useEffect(() => {
     async function loadData() {
-      const { data: productos } = await supabase.from('productos').select('*').limit(4);
-      setTopVentas(productos || []);
+      // 🛡️ Consulta optimizada mediante Vista SQL de ventas mensuales
+      const { data: topMensual } = await supabase.from('top_ventas_mensuales').select('*');
+      setTopVentas(topMensual || []);
 
       const { data: promociones } = await supabase.from('promociones').select('*').eq('activa', true).order('created_at', { ascending: false });
       setPromosActivas(promociones || []);
 
-      const phone = localStorage.getItem('sua_user_phone');
-      if (phone) {
-        const { data: client } = await supabase.from('clientes').select('*').eq('telefono', phone).single();
-        if (client) setUsuario(client);
+      // 🛡️ Hidratación de Sesión Segura (API Centralizada)
+      try {
+        const res = await fetch('/api/auth/me');
+        if (res.ok) {
+          const data = await res.json();
+          setUsuario(data.cliente);
+        }
+      } catch (error) {
+        console.error('Sesión no encontrada');
       }
 
-      // Leer cuántos artículos hay en el carrito al cargar la página
+      // Cargar métricas del carrito visual
       const guardado = localStorage.getItem('sua_carrito');
       if (guardado) {
         const items = JSON.parse(guardado);
@@ -50,29 +60,74 @@ export default function LandingPrincipal() {
     return () => { supabase.removeChannel(sub); };
   }, []);
 
-  // --- 🛒 LÓGICA PARA AGREGAR PROMOS AL CARRITO ---
-  const agregarPromoAlCarrito = (promo: any) => {
-    const itemPromo = {
-      id: promo.id,
-      nombre: promo.titulo,
-      precio_venta: promo.precio,
-      precio_final: promo.precio,
+  const manejarAcceso = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setCargandoAuth(true);
+    setNotificacion({ visible: true, mensaje: 'Estableciendo conexión segura...' });
+    
+    try {
+      const res = await fetch('/api/auth/route', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ telefono: telefonoInput, pin: pinInput })
+      });
+
+      const data = await res.json();
+
+      if (res.ok) {
+        setUsuario(data.cliente);
+        setMostrarModalLogin(false);
+        setNotificacion({ visible: true, mensaje: `Bienvenido al Refugio, ${data.cliente.nombre}` });
+      } else {
+        setNotificacion({ visible: true, mensaje: data.error || 'Credenciales inválidas' });
+      }
+    } catch (error) {
+      setNotificacion({ visible: true, mensaje: 'Error de comunicación con el servidor' });
+    } finally {
+      setCargandoAuth(false);
+      setTimeout(() => setNotificacion({ visible: false, mensaje: '' }), 4000);
+    }
+  };
+
+  const cerrarSesion = async () => {
+    document.cookie = 'sua_session=; Max-Age=0; path=/'; 
+    setUsuario(null);
+    setNotificacion({ visible: true, mensaje: 'Sesión finalizada' });
+    setTimeout(() => setNotificacion({ visible: false, mensaje: '' }), 3000);
+  };
+
+  // --- 🛒 FUNCIÓN POLIMÓRFICA DE CARRITO (PRINCIPIO DRY) ---
+  const inyectarAlCarrito = (item: any, tipo: 'promo' | 'producto') => {
+    // Mapeo dinámico dependiendo del tipo de objeto recibido
+    const itemMapeado = tipo === 'promo' ? {
+      id: item.id,
+      nombre: item.titulo,
+      precio_venta: item.precio,
+      precio_final: item.precio,
       categoria: 'Promo',
-      extras_str: 'Oferta Especial',
+      extras_str: 'Oferta Especial'
+    } : {
+      id: item.id,
+      nombre: item.nombre,
+      precio_venta: item.precio_venta,
+      precio_final: item.precio_venta,
+      categoria: item.categoria,
+      extras_str: 'Clásico'
+    };
+
+    const itemCart = {
+      ...itemMapeado,
       id_carrito: Math.random().toString(36).substr(2, 9)
     };
 
     const guardado = localStorage.getItem('sua_carrito');
     const carritoActual = guardado ? JSON.parse(guardado) : [];
     
-    const nuevoCarrito = [...carritoActual, itemPromo];
+    const nuevoCarrito = [...carritoActual, itemCart];
     localStorage.setItem('sua_carrito', JSON.stringify(nuevoCarrito));
 
-    // Actualizar el numerito del carrito al instante
     setCantidadCarrito(nuevoCarrito.length);
-
-    // Mostrar Notificación Bonita
-    setNotificacion({ visible: true, mensaje: `${promo.titulo} agregado` });
+    setNotificacion({ visible: true, mensaje: `${itemMapeado.nombre} agregado` });
     setTimeout(() => setNotificacion({ visible: false, mensaje: '' }), 3000);
   };
 
@@ -107,7 +162,6 @@ export default function LandingPrincipal() {
   return (
     <main className="relative w-full min-h-screen bg-[#060B08] text-[#CBA36A] font-sans antialiased overflow-x-hidden selection:bg-[#CBA36A] selection:text-[#060B08]">
       
-      {/* 🔔 LA NOTIFICACIÓN ELEGANTE (Toast) */}
       <div className={`fixed bottom-10 left-1/2 -translate-x-1/2 z-[200] bg-[#CBA36A] text-[#0A130D] px-8 py-3 rounded-full font-black text-[10px] uppercase tracking-widest shadow-[0_10px_30px_rgba(0,0,0,0.8)] flex items-center gap-2 transition-all duration-500 transform ${notificacion.visible ? 'translate-y-0 opacity-100' : 'translate-y-20 opacity-0 pointer-events-none'}`}>
         <Check size={16} /> {notificacion.mensaje}
       </div>
@@ -122,24 +176,32 @@ export default function LandingPrincipal() {
         <span className="text-2xl md:text-4xl font-serif font-bold text-[#CBA36A] drop-shadow-md tracking-widest">SÚA</span>
         
         <div className="flex items-center gap-3 md:gap-8">
-          {usuario && rd && (
-            <button onClick={() => setMostrarModal(true)} className="relative group cursor-pointer active:scale-95 transition-all text-left">
-              <div className={`absolute -inset-1 rounded-full blur-md opacity-20 group-hover:opacity-60 transition duration-500 bg-gradient-to-r ${rd.glow}`}></div>
-              <div className={`relative flex items-center gap-3 bg-[#0A130D]/90 border ${rd.border}/30 pl-4 pr-1 py-1 rounded-full shadow-2xl`}>
-                <div className="flex flex-col items-end">
-                  <span className="text-base md:text-2xl font-serif font-bold text-white leading-none capitalize">{usuario.nombre}</span>
-                  <div className={`flex items-center gap-1 mt-1 px-2 py-0.5 rounded-sm ${rd.bg}`}>{rd.icon}<span className={`text-[9px] md:text-[11px] font-black uppercase tracking-widest ${rd.color}`}>{rd.nombre}</span></div>
+          {usuario && rd ? (
+            <div className="flex items-center gap-4">
+              <button onClick={() => setMostrarModalClub(true)} className="relative group cursor-pointer active:scale-95 transition-all text-left">
+                <div className={`absolute -inset-1 rounded-full blur-md opacity-20 group-hover:opacity-60 transition duration-500 bg-gradient-to-r ${rd.glow}`}></div>
+                <div className={`relative flex items-center gap-3 bg-[#0A130D]/90 border ${rd.border}/30 pl-4 pr-1 py-1 rounded-full shadow-2xl`}>
+                  <div className="flex flex-col items-end">
+                    <span className="text-base md:text-2xl font-serif font-bold text-white leading-none capitalize">{usuario.nombre}</span>
+                    <div className={`flex items-center gap-1 mt-1 px-2 py-0.5 rounded-sm ${rd.bg}`}>{rd.icon}<span className={`text-[9px] md:text-[11px] font-black uppercase tracking-widest ${rd.color}`}>{rd.nombre}</span></div>
+                  </div>
+                  <div className={`w-10 h-10 md:w-14 md:h-14 rounded-full flex items-center justify-center border-4 border-[#0A130D] shadow-inner text-[#0A130D] bg-gradient-to-br ${rd.glow}`}>
+                    <span className="font-serif font-black text-xl md:text-3xl">{usuario.nombre.charAt(0).toUpperCase()}</span>
+                  </div>
                 </div>
-                <div className={`w-10 h-10 md:w-14 md:h-14 rounded-full flex items-center justify-center border-4 border-[#0A130D] shadow-inner text-[#0A130D] bg-gradient-to-br ${rd.glow}`}>
-                  <span className="font-serif font-black text-xl md:text-3xl">{usuario.nombre.charAt(0).toUpperCase()}</span>
-                </div>
-              </div>
+              </button>
+              <button onClick={cerrarSesion} className="text-white/40 hover:text-white transition-colors" title="Cerrar Sesión">
+                <X size={20} />
+              </button>
+            </div>
+          ) : (
+            <button onClick={() => setMostrarModalLogin(true)} className="relative px-4 py-2 bg-white/5 border border-[#CBA36A]/30 rounded-full text-[10px] font-black uppercase tracking-widest text-[#CBA36A] hover:bg-[#CBA36A]/10 transition-colors flex items-center gap-2">
+              <Lock size={14} /> Entrar al Refugio
             </button>
           )}
 
           <Link href="/carrito" className="relative bg-[#CBA36A] p-3 md:px-6 md:py-3 rounded-full text-[#060B08] active:scale-90 transition-all shadow-xl flex items-center gap-2 hover:bg-yellow-500">
             <ShoppingCart size={20} /> 
-            {/* 🔴 EL CONTADOR DINÁMICO */}
             {cantidadCarrito > 0 && (
               <span className="absolute -top-1 -right-1 bg-white text-black text-[10px] font-black w-5 h-5 rounded-full flex items-center justify-center border-2 border-[#060B08] animate-in zoom-in">
                 {cantidadCarrito}
@@ -153,17 +215,22 @@ export default function LandingPrincipal() {
       <div className="relative z-10 max-w-6xl mx-auto px-6 pt-48 pb-32">
         <div className="flex flex-col items-center mb-24 relative animate-in fade-in zoom-in duration-1000">
           <div className="absolute -top-10 text-[9px] uppercase tracking-[0.4em] text-[#CBA36A]/60 font-bold">Bienvenido al Refugio</div>
-          <div className="w-44 h-44 md:w-56 md:h-56 rounded-full overflow-hidden border border-[#CBA36A]/40 shadow-[0_0_60px_rgba(203,163,106,0.3)] bg-[#101C13]">
+          <div className="w-44 h-44 md:w-56 md:h-56 rounded-full overflow-hidden border border-[#CBA36A]/40 shadow-[0_0_60px_rgba(203,163,106,0.3)] bg-[#101C13] mb-6">
             <img src="/logo.jpeg" alt="Súa Logo" className="w-full h-full object-cover" />
+          </div>
+          
+          <div className="flex items-center gap-2 bg-[#050A06]/80 backdrop-blur-md border border-[#CBA36A]/30 px-5 py-2 rounded-full shadow-lg">
+            <MapIcon size={14} className="text-[#CBA36A]" />
+            <span className="text-[9px] md:text-[10px] uppercase font-black tracking-widest text-[#CBA36A]/80">
+              Cobertura Limitada: Zona Centro y Providencia (Radio 5km)
+            </span>
           </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-12 mb-32">
           
-          {/* 🎟️ MOTOR DINÁMICO DE PROMOCIONES */}
           <div className="relative overflow-hidden rounded-[2.5rem] shadow-[0_20px_50px_rgba(0,0,0,0.6)]">
             <div className="flex overflow-x-auto snap-x snap-mandatory hide-scrollbar gap-4 h-full">
-              
               {promosActivas.length > 0 ? promosActivas.map((promo) => (
                 <div key={promo.id} className="min-w-full snap-center bg-[#050A06]/80 backdrop-blur-xl p-8 md:p-10 border border-[#CBA36A]/30 relative flex flex-col h-full rounded-[2.5rem]">
                   <div className="absolute top-0 right-0 w-32 h-32 bg-[#CBA36A]/10 rounded-full blur-3xl pointer-events-none"></div>
@@ -187,7 +254,7 @@ export default function LandingPrincipal() {
 
                   <div className="flex justify-between items-center border-t border-[#CBA36A]/20 pt-6 mt-auto">
                     <span className="text-3xl md:text-4xl font-serif text-white">${promo.precio}</span>
-                    <button onClick={() => agregarPromoAlCarrito(promo)} className="bg-[#CBA36A] text-[#0A130D] px-8 py-3 rounded-full font-black text-[10px] uppercase tracking-widest active:scale-90 transition-transform">
+                    <button onClick={() => inyectarAlCarrito(promo, 'promo')} className="bg-[#CBA36A] text-[#0A130D] px-8 py-3 rounded-full font-black text-[10px] uppercase tracking-widest active:scale-90 transition-transform">
                       Agregar
                     </button>
                   </div>
@@ -206,24 +273,37 @@ export default function LandingPrincipal() {
             </div>
           </div>
 
-          {/* Favoritos */}
-          <div className="bg-[#050A06]/80 backdrop-blur-xl p-8 md:p-10 rounded-[2.5rem] border border-[#CBA36A]/30 shadow-[0_20px_50px_rgba(0,0,0,0.6)]">
-            <h2 className="text-3xl md:text-4xl font-serif mb-8 text-[#CBA36A]">Los Favoritos</h2>
-            <div className="space-y-6">
+          <div className="bg-[#050A06]/80 backdrop-blur-xl p-8 md:p-10 rounded-[2.5rem] border border-[#CBA36A]/30 shadow-[0_20px_50px_rgba(0,0,0,0.6)] flex flex-col">
+            <h2 className="text-3xl md:text-4xl font-serif mb-8 text-[#CBA36A]">Los Favoritos del Mes</h2>
+            <div className="space-y-4 flex-1">
               {topVentas?.map((p) => (
-                <div key={p.id} className="flex justify-between items-end border-b border-[#CBA36A]/20 pb-4 p-2 rounded-lg">
+                <div key={p.id} className="group flex justify-between items-center border-b border-[#CBA36A]/10 pb-4 pt-2 hover:bg-white/5 px-3 rounded-xl transition-colors">
                   <div>
-                    <h3 className="text-white font-medium">{p.nombre}</h3>
+                    <h3 className="text-white font-medium text-sm md:text-base">{p.nombre}</h3>
                     <span className="text-[9px] uppercase tracking-widest text-[#CBA36A]/70 mt-1 block">{p.categoria}</span>
                   </div>
-                  <span className="font-serif text-xl text-[#CBA36A]">${p.precio_venta}</span>
+                  <div className="flex items-center gap-4">
+                    <span className="font-serif text-lg md:text-xl text-[#CBA36A]">${p.precio_venta}</span>
+                    <button 
+                      onClick={() => inyectarAlCarrito(p, 'producto')}
+                      className="w-8 h-8 rounded-full border border-[#CBA36A]/40 flex items-center justify-center text-[#CBA36A] hover:bg-[#CBA36A] hover:text-[#0A130D] transition-all active:scale-90"
+                      title={`Agregar ${p.nombre}`}
+                    >
+                      +
+                    </button>
+                  </div>
                 </div>
               ))}
+              
+              {topVentas?.length === 0 && (
+                <div className="text-center py-10 opacity-50">
+                  <p className="text-xs uppercase tracking-widest text-white">Calculando tendencias mensuales...</p>
+                </div>
+              )}
             </div>
           </div>
         </div>
 
-        {/* Categorías */}
         <div className="text-center mb-12 relative">
           <div className="absolute -top-10 left-1/2 -translate-x-1/2 w-px h-16 bg-gradient-to-b from-[#CBA36A]/50 to-transparent" />
           <h2 className="text-4xl font-serif italic text-white drop-shadow-md">¿Qué se te antoja?</h2>
@@ -253,11 +333,59 @@ export default function LandingPrincipal() {
         <p className="text-[9px] tracking-[0.5em] uppercase opacity-40">Súa · Refugio y Café · 2026</p>
       </footer>
 
-      {/* MODAL CLUB SÚA */}
-      {mostrarModal && usuario && rd && (
+      {mostrarModalLogin && (
+        <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/95 backdrop-blur-md animate-in fade-in duration-300 p-4">
+          <div className="bg-[#0A130D] border border-[#CBA36A]/30 w-full max-w-md rounded-[2.5rem] p-8 md:p-10 relative shadow-[0_0_80px_rgba(203,163,106,0.15)]">
+            <button onClick={() => setMostrarModalLogin(false)} className="absolute top-6 right-6 text-white/40 hover:text-[#CBA36A] transition-colors"><X size={24}/></button>
+            <div className="text-center mb-8">
+              <div className="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center mx-auto mb-4 border border-[#CBA36A]/30 text-[#CBA36A]">
+                <Lock size={28} />
+              </div>
+              <h2 className="text-3xl font-serif text-[#CBA36A]">Acceso Súa</h2>
+              <p className="text-[10px] uppercase tracking-widest text-white/50 mt-2">Ingresa tu número y tu PIN de 4 dígitos</p>
+            </div>
+            
+            <form onSubmit={manejarAcceso} className="space-y-6">
+              <div className="relative">
+                <Phone className="absolute left-4 top-1/2 -translate-y-1/2 text-white/40" size={18} />
+                <input 
+                  type="tel" 
+                  maxLength={10}
+                  required
+                  placeholder="Número de Teléfono (10 dígitos)"
+                  className="w-full bg-[#050A06] border border-white/10 rounded-full py-4 pl-12 pr-4 text-white text-sm focus:outline-none focus:border-[#CBA36A] transition-colors"
+                  value={telefonoInput}
+                  onChange={(e) => setTelefonoInput(e.target.value.replace(/\D/g, ''))}
+                />
+              </div>
+              <div className="relative">
+                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-white/40" size={18} />
+                <input 
+                  type="password" 
+                  maxLength={4}
+                  required
+                  placeholder="PIN Secreto (4 dígitos)"
+                  className="w-full bg-[#050A06] border border-white/10 rounded-full py-4 pl-12 pr-4 text-white text-sm tracking-[0.5em] focus:outline-none focus:border-[#CBA36A] transition-colors text-center"
+                  value={pinInput}
+                  onChange={(e) => setPinInput(e.target.value.replace(/\D/g, ''))}
+                />
+              </div>
+              <button 
+                type="submit" 
+                disabled={cargandoAuth || telefonoInput.length < 10 || pinInput.length < 4}
+                className="w-full bg-[#CBA36A] text-[#0A130D] py-4 rounded-full font-black text-[11px] uppercase tracking-widest active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {cargandoAuth ? 'Desencriptando...' : 'Entrar / Crear PIN'}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {mostrarModalClub && usuario && rd && (
          <div className="fixed inset-0 z-[200] flex items-end md:items-center justify-center bg-black/95 backdrop-blur-md animate-in fade-in duration-300 p-4">
            <div className="bg-[#0A130D] border border-[#CBA36A]/30 w-full max-w-2xl md:rounded-[3rem] rounded-t-[3rem] p-6 md:p-10 relative shadow-[0_0_80px_rgba(203,163,106,0.1)] flex flex-col max-h-[85vh]">
-            <button onClick={() => setMostrarModal(false)} className="absolute top-6 right-6 text-white/40 hover:text-white transition-colors z-10"><X size={28}/></button>
+            <button onClick={() => setMostrarModalClub(false)} className="absolute top-6 right-6 text-white/40 hover:text-white transition-colors z-10"><X size={28}/></button>
             <header className="mb-6 text-center shrink-0">
                <h2 className="text-3xl font-serif text-[#CBA36A] mb-1">Club Súa</h2>
                <p className="text-[10px] uppercase tracking-widest text-white/50">{usuario.nombre} • {usuario.visitas} Visitas Totales</p>
