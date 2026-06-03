@@ -16,6 +16,9 @@ export default function LandingPrincipal() {
   const [mostrarModalLogin, setMostrarModalLogin] = useState(false); 
   const [pestanaActiva, setPestanaActiva] = useState<'misiones' | 'rangos'>('misiones');
   
+  // 🛡️ ESTADO DEL SEMÁFORO OPERATIVO GLOBAL
+  const [tiendaAbierta, setTiendaAbierta] = useState<boolean>(true);
+
   const [telefonoInput, setTelefonoInput] = useState('');
   const [pinInput, setPinInput] = useState('');
   const [cargandoAuth, setCargandoAuth] = useState(false);
@@ -25,24 +28,23 @@ export default function LandingPrincipal() {
 
   useEffect(() => {
     async function loadData() {
-      // 🛡️ Consulta optimizada mediante Vista SQL de ventas mensuales
-      // 🛡️ Consulta optimizada con Mecanismo de Respaldo (Fallback)
+      // 1. Consultar estado global de la tienda (Interruptor Maestro)
+      const { data: config } = await supabase.from('configuracion_tienda').select('tienda_abierta').eq('id', 1).single();
+      if (config) setTiendaAbierta(config.tienda_abierta);
+
+      // 2. Consulta optimizada mediante Vista SQL de ventas mensuales con Fallback
       let { data: topMensual } = await supabase.from('top_ventas_mensuales').select('*');
-      
-      // Si no hay ventas este mes, rellenamos con 4 productos aleatorios o clásicos del menú
       if (!topMensual || topMensual.length === 0) {
-        const { data: productosRespaldo } = await supabase
-          .from('productos')
-          .select('*')
-          .limit(4);
+        const { data: productosRespaldo } = await supabase.from('productos').select('*').limit(4);
         topMensual = productosRespaldo;
       }
-      
       setTopVentas(topMensual || []);
+
+      // 3. Cargar Promociones
       const { data: promociones } = await supabase.from('promociones').select('*').eq('activa', true).order('created_at', { ascending: false });
       setPromosActivas(promociones || []);
 
-      // 🛡️ Hidratación de Sesión Segura (API Centralizada)
+      // 4. Hidratación de Sesión Segura
       try {
         const res = await fetch('/api/auth/me');
         if (res.ok) {
@@ -62,13 +64,28 @@ export default function LandingPrincipal() {
     }
     loadData();
     
+    // Escucha en tiempo real para cambios estructurales y del Semáforo Maestro
     const sub = supabase.channel('home_realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'productos' }, () => loadData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'promociones' }, () => loadData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'configuracion_tienda' }, () => loadData())
       .subscribe();
       
     return () => { supabase.removeChannel(sub); };
   }, []);
+
+  // --- ⏱️ ALGORITMO FILTRADO DE TIEMPO EFÍMERO ---
+  const validarHorarioItem = (inicio: string | null, fin: string | null) => {
+    if (!inicio || !fin) return true; // Si no tiene horario asignado, está disponible siempre
+    
+    const ahora = new Date();
+    const horas = String(ahora.getHours()).padStart(2, '0');
+    const minutos = String(ahora.getMinutes()).padStart(2, '0');
+    const segundos = String(ahora.getSeconds()).padStart(2, '0');
+    
+    const horaActual = `${horas}:${minutos}:${segundos}`;
+    return horaActual >= inicio && horaActual <= fin;
+  };
 
   const manejarAcceso = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -76,7 +93,6 @@ export default function LandingPrincipal() {
     setNotificacion({ visible: true, mensaje: 'Estableciendo conexión segura...' });
     
     try {
-      // 🛠️ CORRECCIÓN: La ruta es /api/auth (sin el /route al final)
       const res = await fetch('/api/auth', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -107,9 +123,15 @@ export default function LandingPrincipal() {
     setTimeout(() => setNotificacion({ visible: false, mensaje: '' }), 3000);
   };
 
-  // --- 🛒 FUNCIÓN POLIMÓRFICA DE CARRITO (PRINCIPIO DRY) ---
+  // --- 🛒 FUNCIÓN POLIMÓRFICA CON ESCUDO DE CIERRE ---
   const inyectarAlCarrito = (item: any, tipo: 'promo' | 'producto') => {
-    // Mapeo dinámico dependiendo del tipo de objeto recibido
+    // 🛡️ Interrupción de seguridad si el interruptor maestro está apagado
+    if (!tiendaAbierta) {
+      setNotificacion({ visible: true, mensaje: '🔴 Cocina Cerrada. No se pueden procesar órdenes.' });
+      setTimeout(() => setNotificacion({ visible: false, mensaje: '' }), 4000);
+      return;
+    }
+
     const itemMapeado = tipo === 'promo' ? {
       id: item.id,
       nombre: item.titulo,
@@ -138,7 +160,7 @@ export default function LandingPrincipal() {
     localStorage.setItem('sua_carrito', JSON.stringify(nuevoCarrito));
 
     setCantidadCarrito(nuevoCarrito.length);
-    setNotificacion({ visible: true, mensaje: `${itemMapeado.nombre} agregado` });
+    setNotificacion({ visible: true, mensaje: `👍 ${itemMapeado.nombre} agregado` });
     setTimeout(() => setNotificacion({ visible: false, mensaje: '' }), 3000);
   };
 
@@ -174,7 +196,7 @@ export default function LandingPrincipal() {
     <main className="relative w-full min-h-screen bg-[#060B08] text-[#CBA36A] font-sans antialiased overflow-x-hidden selection:bg-[#CBA36A] selection:text-[#060B08]">
       
       <div className={`fixed bottom-10 left-1/2 -translate-x-1/2 z-[200] bg-[#CBA36A] text-[#0A130D] px-8 py-3 rounded-full font-black text-[10px] uppercase tracking-widest shadow-[0_10px_30px_rgba(0,0,0,0.8)] flex items-center gap-2 transition-all duration-500 transform ${notificacion.visible ? 'translate-y-0 opacity-100' : 'translate-y-20 opacity-0 pointer-events-none'}`}>
-        <Check size={16} /> {notificacion.mensaje}
+        {notificacion.mensaje.includes('🔴') ? null : <Check size={16} />} {notificacion.mensaje}
       </div>
 
       <div className="absolute inset-0 z-0 pointer-events-none">
@@ -224,25 +246,38 @@ export default function LandingPrincipal() {
       </header>
 
       <div className="relative z-10 max-w-6xl mx-auto px-6 pt-48 pb-32">
+        
+        {/* Banner Operativo Global */}
+        {!tiendaAbierta && (
+          <div className="w-full max-w-xl mx-auto mb-10 bg-red-950/40 border border-red-500/30 p-4 rounded-3xl text-center backdrop-blur-md shadow-2xl animate-pulse">
+            <p className="text-xs uppercase font-black tracking-widest text-red-400 flex items-center justify-center gap-2">
+              <Clock size={14}/> El Refugio Descansa. Cocina Cerrada Temporalmente.
+            </p>
+          </div>
+        )}
+
         <div className="flex flex-col items-center mb-24 relative animate-in fade-in zoom-in duration-1000">
           <div className="absolute -top-10 text-[9px] uppercase tracking-[0.4em] text-[#CBA36A]/60 font-bold">Bienvenido al Refugio</div>
           <div className="w-44 h-44 md:w-56 md:h-56 rounded-full overflow-hidden border border-[#CBA36A]/40 shadow-[0_0_60px_rgba(203,163,106,0.3)] bg-[#101C13] mb-6">
             <img src="/logo.jpeg" alt="Súa Logo" className="w-full h-full object-cover" />
           </div>
           
+          {/* 📍 RESTRICCIÓN LOGÍSTICA ACTUALIZADA */}
           <div className="flex items-center gap-2 bg-[#050A06]/80 backdrop-blur-md border border-[#CBA36A]/30 px-5 py-2 rounded-full shadow-lg">
             <MapIcon size={14} className="text-[#CBA36A]" />
-            <span className="text-[9px] md:text-[10px] uppercase font-black tracking-widest text-[#CBA36A]/80">
-              Cobertura Limitada: Zona Centro y Providencia (Radio 5km)
+            <span className="text-[9px] md:text-[10px] uppercase font-black tracking-widest text-[#CBA36A]/80 text-center">
+              Servicio a Domicilio Exclusivo: Molinos y Tréboles
             </span>
           </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-12 mb-32">
           
+          {/* FOTÓNICA DE PROMOCIONES CON FILTRADO HORARIO */}
           <div className="relative overflow-hidden rounded-[2.5rem] shadow-[0_20px_50px_rgba(0,0,0,0.6)]">
             <div className="flex overflow-x-auto snap-x snap-mandatory hide-scrollbar gap-4 h-full">
-              {promosActivas.length > 0 ? promosActivas.map((promo) => (
+              {promosActivas.filter(p => validarHorarioItem(p.hora_inicio, p.hora_fin)).length > 0 ? 
+                promosActivas.filter(p => validarHorarioItem(p.hora_inicio, p.hora_fin)).map((promo) => (
                 <div key={promo.id} className="min-w-full snap-center bg-[#050A06]/80 backdrop-blur-xl p-8 md:p-10 border border-[#CBA36A]/30 relative flex flex-col h-full rounded-[2.5rem]">
                   <div className="absolute top-0 right-0 w-32 h-32 bg-[#CBA36A]/10 rounded-full blur-3xl pointer-events-none"></div>
                   <span className="text-[10px] font-black uppercase tracking-[0.2em] text-[#CBA36A] opacity-80 mb-2 block">
@@ -265,8 +300,12 @@ export default function LandingPrincipal() {
 
                   <div className="flex justify-between items-center border-t border-[#CBA36A]/20 pt-6 mt-auto">
                     <span className="text-3xl md:text-4xl font-serif text-white">${promo.precio}</span>
-                    <button onClick={() => inyectarAlCarrito(promo, 'promo')} className="bg-[#CBA36A] text-[#0A130D] px-8 py-3 rounded-full font-black text-[10px] uppercase tracking-widest active:scale-90 transition-transform">
-                      Agregar
+                    <button 
+                      onClick={() => inyectarAlCarrito(promo, 'promo')} 
+                      disabled={!tiendaAbierta}
+                      className="bg-[#CBA36A] text-[#0A130D] px-8 py-3 rounded-full font-black text-[10px] uppercase tracking-widest active:scale-90 transition-transform disabled:opacity-30 disabled:cursor-not-allowed"
+                    >
+                      {tiendaAbierta ? 'Agregar' : 'Cerrado'}
                     </button>
                   </div>
                 </div>
@@ -284,21 +323,25 @@ export default function LandingPrincipal() {
             </div>
           </div>
 
+          {/* FAVORITOS CON FILTRADO HORARIO */}
           <div className="bg-[#050A06]/80 backdrop-blur-xl p-8 md:p-10 rounded-[2.5rem] border border-[#CBA36A]/30 shadow-[0_20px_50px_rgba(0,0,0,0.6)] flex flex-col">
             <h2 className="text-3xl md:text-4xl font-serif mb-8 text-[#CBA36A]">Los Favoritos del Mes</h2>
             <div className="space-y-4 flex-1">
-              {topVentas?.map((p) => (
+              {topVentas?.filter(p => validarHorarioItem(p.hora_inicio, p.hora_fin)).map((p) => (
                 <div key={p.id} className="group flex justify-between items-center border-b border-[#CBA36A]/10 pb-4 pt-2 hover:bg-white/5 px-3 rounded-xl transition-colors">
                   <div>
                     <h3 className="text-white font-medium text-sm md:text-base">{p.nombre}</h3>
-                    <span className="text-[9px] uppercase tracking-widest text-[#CBA36A]/70 mt-1 block">{p.categoria}</span>
+                    <span className="text-[8px] uppercase tracking-widest text-[#CBA36A]/70 mt-1 block flex items-center gap-1">
+                      {p.categoria} {p.hora_inicio && <span className="text-white/30">• Elixir Efímero</span>}
+                    </span>
                   </div>
                   <div className="flex items-center gap-4">
                     <span className="font-serif text-lg md:text-xl text-[#CBA36A]">${p.precio_venta}</span>
                     <button 
                       onClick={() => inyectarAlCarrito(p, 'producto')}
-                      className="w-8 h-8 rounded-full border border-[#CBA36A]/40 flex items-center justify-center text-[#CBA36A] hover:bg-[#CBA36A] hover:text-[#0A130D] transition-all active:scale-90"
-                      title={`Agregar ${p.nombre}`}
+                      disabled={!tiendaAbierta}
+                      className="w-8 h-8 rounded-full border border-[#CBA36A]/40 flex items-center justify-center text-[#CBA36A] hover:bg-[#CBA36A] hover:text-[#0A130D] transition-all active:scale-90 disabled:opacity-20"
+                      title={tiendaAbierta ? `Agregar ${p.nombre}` : 'Tienda Cerrada'}
                     >
                       +
                     </button>
@@ -306,7 +349,7 @@ export default function LandingPrincipal() {
                 </div>
               ))}
               
-              {topVentas?.length === 0 && (
+              {topVentas?.filter(p => validarHorarioItem(p.hora_inicio, p.hora_fin)).length === 0 && (
                 <div className="text-center py-10 opacity-50">
                   <p className="text-xs uppercase tracking-widest text-white">Calculando tendencias mensuales...</p>
                 </div>
