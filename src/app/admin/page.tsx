@@ -85,17 +85,48 @@ export default function AdminPage() {
 
   const guardarCambiosMenu = async () => {
     setGuardando(true);
+    let conteoErrores = 0;
+    let mensajeError = '';
+
     try {
-      for (const p of productos) {
-        await supabase.from('productos').update({
-          precio_venta: p.precio_venta,
+      // Usamos Promise.all para ejecutar actualizaciones en paralelo (Más rápido que un ciclo for tradicional)
+      const promesas = productos.map(async (p) => {
+        // Validación matemática: Forzamos la conversión a número puro para evitar rechazos en BD
+        const precioNumerico = Number(p.precio_venta);
+        
+        if (isNaN(precioNumerico)) {
+          throw new Error(`El precio de ${p.nombre} no es un número válido.`);
+        }
+
+        const { error } = await supabase.from('productos').update({
+          precio_venta: precioNumerico,
           imagen_url: p.imagen_url,
           horario: p.horario
         }).eq('id', p.id);
+
+        if (error) {
+          console.error(`Fallo en la matriz al actualizar ${p.nombre}:`, error);
+          conteoErrores++;
+          mensajeError = error.message; // Capturamos el grito real de la base de datos
+        }
+      });
+
+      await Promise.all(promesas);
+
+      if (conteoErrores > 0) {
+        // Rompemos la ilusión: Forzamos el salto al bloque catch
+        throw new Error(mensajeError || `Falló la actualización de ${conteoErrores} productos.`);
       }
-      mostrarMensaje('¡Menú actualizado!');
-    } catch (error) { mostrarMensaje('Error al guardar'); } 
-    finally { setGuardando(false); }
+
+      mostrarMensaje('¡Sincronización con BD exitosa!');
+    } catch (error: any) { 
+      console.error('Telemetría de Error:', error);
+      mostrarMensaje('Error de sistema: Revisa la consola'); 
+      alert(`Fallo Crítico: ${error.message}`); // Te mostrará si es un problema de permisos RLS
+    } 
+    finally { 
+      setGuardando(false); 
+    }
   };
 
   // --- LÓGICA DE PROMOCIONES ---
