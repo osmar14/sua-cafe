@@ -26,9 +26,19 @@ export default function LandingPrincipal() {
   useEffect(() => {
     async function loadData() {
       // 🛡️ Consulta optimizada mediante Vista SQL de ventas mensuales
-      const { data: topMensual } = await supabase.from('top_ventas_mensuales').select('*');
+      // 🛡️ Consulta optimizada con Mecanismo de Respaldo (Fallback)
+      let { data: topMensual } = await supabase.from('top_ventas_mensuales').select('*');
+      
+      // Si no hay ventas este mes, rellenamos con 4 productos aleatorios o clásicos del menú
+      if (!topMensual || topMensual.length === 0) {
+        const { data: productosRespaldo } = await supabase
+          .from('productos')
+          .select('*')
+          .limit(4);
+        topMensual = productosRespaldo;
+      }
+      
       setTopVentas(topMensual || []);
-
       const { data: promociones } = await supabase.from('promociones').select('*').eq('activa', true).order('created_at', { ascending: false });
       setPromosActivas(promociones || []);
 
@@ -66,7 +76,8 @@ export default function LandingPrincipal() {
     setNotificacion({ visible: true, mensaje: 'Estableciendo conexión segura...' });
     
     try {
-      const res = await fetch('/api/auth/route', {
+      // 🛠️ CORRECCIÓN: La ruta es /api/auth (sin el /route al final)
+      const res = await fetch('/api/auth', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ telefono: telefonoInput, pin: pinInput })
