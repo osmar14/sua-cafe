@@ -3,7 +3,10 @@ import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
-import { ShoppingCart, ArrowLeft, Coffee, CupSoda, Snowflake, Croissant, LayoutGrid, X, Check } from 'lucide-react';
+import { 
+  ShoppingCart, ArrowLeft, Coffee, CupSoda, Snowflake, 
+  Croissant, LayoutGrid, X, Check, Clock, AlertCircle 
+} from 'lucide-react';
 
 // Subcomponente para manejar los parámetros de búsqueda sin romper la página
 function MenuContent() {
@@ -15,6 +18,9 @@ function MenuContent() {
   const [carrito, setCarrito] = useState<any[]>([]);
   const [itemSeleccionado, setItemSeleccionado] = useState<any>(null);
   
+  // 🛡️ ESTADO DEL SEMÁFORO OPERATIVO GLOBAL
+  const [tiendaAbierta, setTiendaAbierta] = useState<boolean>(true);
+
   // Estados para los extras del modal
   const [extraDeslactosada, setExtraDeslactosada] = useState(false);
   const [extraShot, setExtraShot] = useState(false);
@@ -34,7 +40,12 @@ function MenuContent() {
   }, [categoriaURL]);
 
   useEffect(() => {
-    async function fetchProductos() {
+    async function fetchData() {
+      // 1. Consultar estado global de la tienda (Interruptor Maestro)
+      const { data: config } = await supabase.from('configuracion_tienda').select('tienda_abierta').eq('id', 1).single();
+      if (config) setTiendaAbierta(config.tienda_abierta);
+
+      // 2. Cargar Menú
       let peticion = supabase.from('productos').select('*');
       
       if (categoria === 'caliente') peticion = peticion.ilike('categoria', '%alient%');
@@ -45,16 +56,32 @@ function MenuContent() {
       const { data } = await peticion;
       setProductos(data || []);
     }
-    fetchProductos();
+    fetchData();
     
+    // Escucha dual: Filtros de menú y Semáforo de Tienda
     const sub = supabase.channel(`menu_${categoria}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'productos' }, () => fetchProductos())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'productos' }, () => fetchData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'configuracion_tienda' }, () => fetchData())
       .subscribe();
       
     return () => { supabase.removeChannel(sub); };
   }, [categoria]);
 
-  // Mostrar notificación bonita
+  // --- ⏱️ LÓGICA DE TIEMPO Y FORMATEO ---
+  const validarHorarioItem = (inicio: string | null, fin: string | null) => {
+    if (!inicio || !fin) return true; 
+    
+    const ahora = new Date();
+    const horas = String(ahora.getHours()).padStart(2, '0');
+    const minutos = String(ahora.getMinutes()).padStart(2, '0');
+    const segundos = String(ahora.getSeconds()).padStart(2, '0');
+    
+    const horaActual = `${horas}:${minutos}:${segundos}`;
+    return horaActual >= inicio && horaActual <= fin;
+  };
+
+  const formatearHora = (horaFull: string) => horaFull.substring(0, 5);
+
   const mostrarNotificacion = (mensaje: string) => {
     setNotificacion({ visible: true, mensaje });
     setTimeout(() => setNotificacion({ visible: false, mensaje: '' }), 3000);
@@ -69,7 +96,6 @@ function MenuContent() {
     if (extraDeslactosada) { costoExtras += 10; extrasNombres.push("Deslactosada"); }
     if (extraShot) { costoExtras += 10; extrasNombres.push("Doble Shot"); }
     
-    // Lógica de Crema Batida (Gratis si es Frappé)
     const esFrappe = itemSeleccionado.categoria.toLowerCase().includes('frap');
     if (extraCrema) {
       if (!esFrappe) costoExtras += 10;
@@ -87,27 +113,35 @@ function MenuContent() {
     setCarrito(nuevoCarrito);
     localStorage.setItem('sua_carrito', JSON.stringify(nuevoCarrito));
     
-    // Cerrar modal y limpiar
     setItemSeleccionado(null);
     setExtraDeslactosada(false); setExtraShot(false); setExtraCrema(false);
     
-    mostrarNotificacion(`${itemSeleccionado.nombre} agregado a tu cuenta`);
+    mostrarNotificacion(`👍 ${itemSeleccionado.nombre} agregado a tu cuenta`);
   };
 
+  // 🛡️ ESCUDO DE INTERCEPCIÓN EN EL MODAL
   const abrirModal = (producto: any) => {
-    // Si es pan, se agrega directo sin preguntar por leche
+    if (!tiendaAbierta) {
+      mostrarNotificacion('🔴 Cocina Cerrada. No se pueden procesar órdenes.');
+      return;
+    }
+
+    if (!validarHorarioItem(producto.hora_inicio, producto.hora_fin)) {
+      mostrarNotificacion('⏳ Este producto se encuentra fuera de su horario especial.');
+      return;
+    }
+
     if (producto.categoria.toLowerCase().includes('pan')) {
       const productoFinal = { ...producto, id_carrito: Math.random().toString(36).substr(2, 9), precio_final: Number(producto.precio_venta), extras_str: "" };
       const nuevoCarrito = [...carrito, productoFinal];
       setCarrito(nuevoCarrito);
       localStorage.setItem('sua_carrito', JSON.stringify(nuevoCarrito));
-      mostrarNotificacion(`${producto.nombre} agregado a tu cuenta`);
+      mostrarNotificacion(`👍 ${producto.nombre} agregado a tu cuenta`);
     } else {
       setItemSeleccionado(producto);
     }
   };
 
-  // Calculo en tiempo real del total en el modal
   const esFrappe = itemSeleccionado?.categoria?.toLowerCase().includes('frap');
   const costoTotalModal = itemSeleccionado ? 
     Number(itemSeleccionado.precio_venta) + 
@@ -117,7 +151,6 @@ function MenuContent() {
 
   return (
     <>
-      {/* 🏷️ HEADER DINÁMICO */}
       <header className="fixed top-0 left-0 w-full z-50 p-4 md:p-6 flex justify-between items-center bg-[#060B08]/90 backdrop-blur-xl border-b border-[#CBA36A]/10 shadow-lg">
         <Link href="/" className="flex items-center gap-2 text-[#CBA36A] hover:text-white transition-colors">
           <ArrowLeft size={20} /> <span className="text-[10px] font-black uppercase tracking-widest hidden md:block">Volver</span>
@@ -127,7 +160,6 @@ function MenuContent() {
         
         <Link href="/carrito" className="relative bg-[#CBA36A] p-3 md:px-6 md:py-3 rounded-full text-[#060B08] active:scale-90 transition-all shadow-xl flex items-center gap-2 hover:bg-yellow-500">
           <ShoppingCart size={20} />
-          {/* 🔴 EL CONTADOR DINÁMICO */}
           {carrito.length > 0 && (
             <span className="absolute -top-1 -right-1 bg-white text-black text-[10px] font-black w-5 h-5 rounded-full flex items-center justify-center border-2 border-[#060B08] animate-in zoom-in">
               {carrito.length}
@@ -137,18 +169,26 @@ function MenuContent() {
         </Link>
       </header>
 
-      {/* 🔔 LA NOTIFICACIÓN ELEGANTE (Toast) */}
       <div className={`fixed bottom-10 left-1/2 -translate-x-1/2 z-[200] bg-[#CBA36A] text-[#0A130D] px-8 py-3 rounded-full font-black text-[10px] uppercase tracking-widest shadow-[0_10px_30px_rgba(0,0,0,0.8)] flex items-center gap-2 transition-all duration-500 transform ${notificacion.visible ? 'translate-y-0 opacity-100' : 'translate-y-20 opacity-0 pointer-events-none'}`}>
-        <Check size={16} /> {notificacion.mensaje}
+        {notificacion.mensaje.includes('🔴') || notificacion.mensaje.includes('⏳') ? null : <Check size={16} />} {notificacion.mensaje}
       </div>
 
       <div className="relative z-10 max-w-6xl mx-auto px-6 pt-32 pb-32">
-        <div className="text-center mb-10 mt-10">
+        
+        {/* BANNER DE EMERGENCIA OPERATIVA */}
+        {!tiendaAbierta && (
+          <div className="w-full max-w-xl mx-auto mb-6 bg-red-950/40 border border-red-500/30 p-4 rounded-3xl text-center backdrop-blur-md shadow-2xl animate-in slide-in-from-top-4">
+            <p className="text-xs uppercase font-black tracking-widest text-red-400 flex items-center justify-center gap-2">
+              <AlertCircle size={14}/> Menú en modo visualización. Cocina Cerrada.
+            </p>
+          </div>
+        )}
+
+        <div className="text-center mb-10 mt-6">
           <h1 className="text-4xl md:text-5xl font-serif italic text-white drop-shadow-md mb-2">Nuestro Menú</h1>
           <p className="text-[10px] font-bold tracking-[0.4em] uppercase text-[#CBA36A]/60">Selección Artesanal</p>
         </div>
 
-        {/* 🗂️ FILTROS */}
         <div className="flex overflow-x-auto hide-scrollbar gap-3 mb-12 pb-4 snap-x snap-mandatory">
           {[
             { id: 'todos', label: 'Todo', icon: <LayoutGrid size={16} /> },
@@ -163,28 +203,43 @@ function MenuContent() {
           ))}
         </div>
 
-        {/* ☕ PRODUCTOS */}
         <div key={categoria} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-          {productos.map((producto) => (
-            <div key={producto.id} className="bg-[#050A06]/80 backdrop-blur-xl p-6 rounded-3xl border border-[#CBA36A]/20 shadow-xl flex flex-col justify-between group hover:border-[#CBA36A]/50 transition-colors">
-              <div>
-                <div className="flex justify-between items-start mb-4">
-                  <span className="bg-[#CBA36A]/10 text-[#CBA36A] px-3 py-1 rounded-md text-[8px] font-black uppercase tracking-widest border border-[#CBA36A]/20">{producto.categoria}</span>
+          {productos.map((producto) => {
+            const enHorario = validarHorarioItem(producto.hora_inicio, producto.hora_fin);
+            const disponible = tiendaAbierta && enHorario;
+
+            return (
+              <div key={producto.id} className={`bg-[#050A06]/80 backdrop-blur-xl p-6 rounded-3xl border border-[#CBA36A]/20 shadow-xl flex flex-col justify-between group transition-all duration-700 ${!enHorario ? 'opacity-50 grayscale' : 'hover:border-[#CBA36A]/50'}`}>
+                <div>
+                  <div className="flex justify-between items-start mb-4">
+                    <span className="bg-[#CBA36A]/10 text-[#CBA36A] px-3 py-1 rounded-md text-[8px] font-black uppercase tracking-widest border border-[#CBA36A]/20">{producto.categoria}</span>
+                    
+                    {/* ETIQUETA DE TIEMPO EFÍMERO */}
+                    {!enHorario && producto.hora_inicio && (
+                      <span className="text-[8px] bg-[#0A130D] text-[#CBA36A] px-2 py-1 rounded border border-[#CBA36A]/30 font-black uppercase tracking-widest flex items-center gap-1 shadow-lg">
+                        <Clock size={10} /> De {formatearHora(producto.hora_inicio)} a {formatearHora(producto.hora_fin)}
+                      </span>
+                    )}
+                  </div>
+                  <h3 className="text-xl font-serif text-white mb-2">{producto.nombre}</h3>
+                  <p className="text-sm text-white/50 font-light mb-6 line-clamp-2">Preparación exacta de Súa.</p>
                 </div>
-                <h3 className="text-xl font-serif text-white mb-2">{producto.nombre}</h3>
-                <p className="text-sm text-white/50 font-light mb-6 line-clamp-2">Preparación exacta de Súa.</p>
+                <div className="flex items-center justify-between border-t border-[#CBA36A]/10 pt-4 mt-auto">
+                  <span className="text-2xl font-serif text-[#CBA36A]">${producto.precio_venta}</span>
+                  <button 
+                    onClick={() => abrirModal(producto)} 
+                    disabled={!disponible}
+                    className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${disponible ? 'bg-[#CBA36A]/10 border border-[#CBA36A]/30 text-[#CBA36A] hover:bg-[#CBA36A] hover:text-[#0A130D] active:scale-90' : 'bg-white/5 border border-white/10 text-white/30 cursor-not-allowed'}`}
+                    title={!tiendaAbierta ? 'Tienda Cerrada' : !enHorario ? 'Fuera de Horario' : 'Agregar'}
+                  >
+                    +
+                  </button>
+                </div>
               </div>
-              <div className="flex items-center justify-between border-t border-[#CBA36A]/10 pt-4 mt-auto">
-                <span className="text-2xl font-serif text-[#CBA36A]">${producto.precio_venta}</span>
-                <button onClick={() => abrirModal(producto)} className="w-10 h-10 rounded-full bg-[#CBA36A]/10 border border-[#CBA36A]/30 flex items-center justify-center text-[#CBA36A] hover:bg-[#CBA36A] hover:text-[#0A130D] active:scale-90 transition-all">
-                  +
-                </button>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
 
-        {/* 🥛 MODAL DE EXTRAS INTELIGENTE */}
         {itemSeleccionado && (
           <div className="fixed inset-0 z-[100] flex items-end md:items-center justify-center bg-black/80 backdrop-blur-sm animate-in fade-in duration-300">
             <div className="bg-[#0A130D] border border-[#CBA36A]/30 p-8 rounded-t-[2.5rem] md:rounded-[2.5rem] w-full max-w-md relative animate-in slide-in-from-bottom-10 md:slide-in-from-bottom-0 shadow-[0_0_50px_rgba(203,163,106,0.1)]">
@@ -220,11 +275,9 @@ function MenuContent() {
   );
 }
 
-// Estructura principal de la página
 export default function MenuPage() {
   return (
     <main className="relative w-full min-h-screen bg-[#060B08] text-[#CBA36A] font-sans antialiased overflow-x-hidden selection:bg-[#CBA36A] selection:text-[#060B08]">
-      {/* 🖼️ FONDO INMERSIVO */}
       <div className="fixed inset-0 z-0 pointer-events-none">
         <div className="md:hidden absolute inset-0 bg-[url('/bg-bosque.png')] bg-top bg-repeat-y bg-[length:100%_auto] opacity-60 mix-blend-lighten"></div>
         <div className="hidden md:block absolute inset-0">
@@ -233,8 +286,7 @@ export default function MenuPage() {
         <div className="absolute inset-0 bg-gradient-to-b from-[#060B08]/40 via-[#060B08]/80 to-[#060B08]"></div>
       </div>
 
-      {/* Cargar el contenido con Suspense para que no bloquee */}
-      <Suspense fallback={<div className="pt-40 text-center text-white">Cargando la magia de Súa...</div>}>
+      <Suspense fallback={<div className="pt-40 text-center text-white font-serif italic animate-pulse">Cargando la magia de Súa...</div>}>
         <MenuContent />
       </Suspense>
     </main>
