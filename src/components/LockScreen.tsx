@@ -1,66 +1,104 @@
 'use client';
 import { useState, useEffect } from 'react';
-import { Lock, Unlock, ArrowRight } from 'lucide-react';
+import { Lock, ShieldAlert } from 'lucide-react';
 
-export default function LockScreen({ children, titulo }: { children: React.ReactNode, titulo: string }) {
-  const [bloqueado, setBloqueado] = useState(true);
+interface LockScreenProps {
+  children: React.ReactNode;
+  titulo?: string;
+  modulo?: 'admin' | 'caja' | 'finanzas'; // Identificador para saber qué PIN pedir
+}
+
+export default function LockScreen({ children, titulo = "Acceso Restringido", modulo = 'admin' }: LockScreenProps) {
+  const [autorizado, setAutorizado] = useState(false);
   const [pinInput, setPinInput] = useState('');
-  const [error, setError] = useState(false);
+  const [cargando, setCargando] = useState(true);
 
-  // Leemos el PIN secreto desde tus variables de entorno
-  const PIN_SECRETO = process.env.NEXT_PUBLIC_ADMIN_PIN;
-
+  // 1. Verificación Silenciosa al cargar la página
   useEffect(() => {
-    // Verificamos si ya había iniciado sesión en este dispositivo
-    const session = sessionStorage.getItem('sua_admin_unlocked');
-    if (session === 'true') setBloqueado(false);
+    async function verificarSesion() {
+      try {
+        const res = await fetch('/api/admin/me');
+        if (res.ok) {
+          setAutorizado(true);
+        }
+      } catch (e) {
+        console.error('Sin sesión activa');
+      } finally {
+        setCargando(false);
+      }
+    }
+    verificarSesion();
   }, []);
 
-  const verificarPin = (e: React.FormEvent) => {
+  // 2. Intento de Acceso
+  const manejarAcceso = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (pinInput === PIN_SECRETO) {
-      sessionStorage.setItem('sua_admin_unlocked', 'true');
-      setBloqueado(false);
-    } else {
-      setError(true);
-      setPinInput('');
-      setTimeout(() => setError(false), 2000);
+    setCargando(true);
+    
+    try {
+      const res = await fetch('/api/admin/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pin: pinInput, modulo }) // Enviamos el PIN y de qué página viene
+      });
+
+      if (res.ok) {
+        setAutorizado(true);
+      } else {
+        alert('PIN de acceso denegado.');
+        setPinInput('');
+      }
+    } catch (error) {
+      alert('Error de red. Intente nuevamente.');
+    } finally {
+      setCargando(false);
     }
   };
 
-  if (!bloqueado) return <>{children}</>;
+  if (cargando) {
+    return <div className="min-h-screen bg-[#060B08] flex items-center justify-center"><div className="w-8 h-8 border-4 border-[#CBA36A] border-t-transparent rounded-full animate-spin"></div></div>;
+  }
 
-  return (
-    <main className="min-h-screen bg-[#060B08] flex items-center justify-center p-6 text-[#CBA36A] font-sans">
-      <div className="fixed inset-0 z-0 bg-[url('/bg-bosque.png')] opacity-10 bg-cover pointer-events-none grayscale"></div>
-      
-      <div className="relative z-10 bg-[#0A130D] border border-[#CBA36A]/20 p-8 md:p-12 rounded-[3rem] shadow-[0_0_50px_rgba(203,163,106,0.1)] w-full max-w-md text-center">
-        <div className="w-16 h-16 bg-[#CBA36A]/10 rounded-full flex items-center justify-center mx-auto mb-6 border border-[#CBA36A]/30">
-          <Lock size={28} className="text-[#CBA36A]" />
-        </div>
-        
-        <h1 className="text-3xl font-serif text-white mb-2">{titulo}</h1>
-        <p className="text-[10px] font-black uppercase tracking-widest text-white/40 mb-8">Acceso Restringido</p>
-
-        <form onSubmit={verificarPin} className="space-y-6">
-          <div>
-            <input 
-              type="password" 
-              maxLength={6}
-              value={pinInput} 
-              onChange={(e) => setPinInput(e.target.value.replace(/\D/g, ''))} 
-              placeholder="••••••" 
-              className={`w-full bg-black/40 border ${error ? 'border-red-500/50 text-red-500' : 'border-white/10 text-white focus:border-[#CBA36A]'} p-4 rounded-2xl text-center text-2xl tracking-[0.5em] outline-none transition-colors`}
-              autoFocus
-            />
-            {error && <p className="text-red-500 text-[10px] uppercase font-bold mt-2 tracking-widest animate-pulse">PIN Incorrecto</p>}
+  if (!autorizado) {
+    return (
+      <main className="min-h-screen bg-[#060B08] flex items-center justify-center p-6 font-sans">
+        <div className="w-full max-w-sm bg-[#0A130D] p-8 rounded-[2rem] border border-[#CBA36A]/30 shadow-[0_0_50px_rgba(203,163,106,0.1)] text-center relative overflow-hidden">
+          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-[#CBA36A] to-transparent"></div>
+          
+          <div className="w-16 h-16 bg-[#CBA36A]/10 text-[#CBA36A] rounded-full flex items-center justify-center mx-auto mb-6 border border-[#CBA36A]/40">
+            <ShieldAlert size={28} />
           </div>
+          <h1 className="text-2xl font-serif text-[#CBA36A] mb-2">{titulo}</h1>
+          <p className="text-[10px] uppercase tracking-widest text-white/50 mb-8">
+            {modulo === 'caja' ? 'Ingrese su NIP de Operador' : 'Identificación Biométrica Requerida'}
+          </p>
+          
+          <form onSubmit={manejarAcceso} className="space-y-6">
+            <div className="relative">
+              <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-[#CBA36A]/50" size={18} />
+              <input 
+                type="password" 
+                maxLength={6}
+                required
+                placeholder="PIN"
+                className="w-full bg-black/50 border border-white/10 rounded-xl py-4 pl-12 pr-4 text-white text-center tracking-[1em] focus:outline-none focus:border-[#CBA36A] transition-colors"
+                value={pinInput}
+                onChange={(e) => setPinInput(e.target.value.replace(/\D/g, ''))}
+              />
+            </div>
+            <button 
+              type="submit" 
+              disabled={cargando || pinInput.length < 4}
+              className="w-full bg-[#CBA36A] text-black py-4 rounded-xl font-black text-[11px] uppercase tracking-widest active:scale-95 transition-all disabled:opacity-50 hover:bg-yellow-500 shadow-lg"
+            >
+              Desbloquear Sistema
+            </button>
+          </form>
+        </div>
+      </main>
+    );
+  }
 
-          <button type="submit" className="w-full bg-[#CBA36A] text-[#0A130D] py-4 rounded-full font-black text-xs uppercase tracking-widest active:scale-95 transition-all flex justify-center items-center gap-2">
-            Desbloquear <ArrowRight size={16} />
-          </button>
-        </form>
-      </div>
-    </main>
-  );
+  // Si está autorizado, mostramos la página (Admin, Finanzas, o Caja)
+  return <>{children}</>;
 }
