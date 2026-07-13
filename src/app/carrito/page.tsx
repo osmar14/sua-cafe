@@ -17,6 +17,7 @@ export default function CarritoPage() {
   // 3. Estados de Domicilio Dinámico (JSONB en Supabase)
   const [domicilioGuardado, setDomicilioGuardado] = useState<any>(null);
   const [mostrarFormDomicilio, setMostrarFormDomicilio] = useState(false);
+  // Inicializamos fraccionamiento vacío para forzar la selección en el dropdown
   const [formDom, setFormDom] = useState({ calle: '', numero: '', fraccionamiento: '', notas: '' });
 
   // 4. Estados de Sistema
@@ -30,14 +31,13 @@ export default function CarritoPage() {
       const g = localStorage.getItem('sua_carrito');
       if (g) setCarrito(JSON.parse(g));
       
-      // Validar identidad del cliente con la API criptográfica
+      // Validar identidad del cliente
       try {
         const res = await fetch('/api/auth/me');
         if (res.ok) {
           const data = await res.json();
           setUsuario(data.cliente);
           
-          // Escrutinio de Estado: ¿Tiene domicilio guardado?
           if (data.cliente.domicilio_entrega && Object.keys(data.cliente.domicilio_entrega).length > 0) {
             setDomicilioGuardado(data.cliente.domicilio_entrega);
           }
@@ -67,7 +67,6 @@ export default function CarritoPage() {
   const guardarNuevoDomicilio = async () => {
     if (!formDom.calle || !formDom.numero || !formDom.fraccionamiento) return alert('Completa los campos obligatorios del domicilio.');
     
-    // Transacción al servidor para actualizar el perfil del cliente
     const nuevoDom = { ...formDom };
     const { error } = await supabase.from('clientes').update({ domicilio_entrega: nuevoDom }).eq('id', usuario.id);
     
@@ -86,7 +85,6 @@ export default function CarritoPage() {
     setEnviando(true);
 
     try {
-      // Enviar a Cocina (Estructura de Orden Mejorada)
       const { error } = await supabase.from('pedidos').insert([{
         cliente_nombre: usuario.nombre,
         telefono: usuario.telefono,
@@ -95,7 +93,7 @@ export default function CarritoPage() {
         domicilio: metodoEntrega === 'domicilio' ? domicilioGuardado : null,
         items: carrito,
         total: total,
-        estado: 'pendiente'
+        estado: 'pendiente' // El ciclo que programamos inicia aquí
       }]);
 
       if (error) throw error;
@@ -110,7 +108,6 @@ export default function CarritoPage() {
     }
   };
 
-  // --- RENDERIZADOS CONDICIONALES DE SEGURIDAD ---
   if (errorSesion) return (
     <main className="min-h-screen bg-[#060B08] flex flex-col items-center justify-center p-6 text-center">
       <div className="w-20 h-20 border-2 border-red-500/30 rounded-full flex items-center justify-center mb-6 text-red-500 bg-red-500/10">
@@ -183,7 +180,6 @@ export default function CarritoPage() {
               
               <h2 className="text-lg font-serif text-[#CBA36A] mb-6 text-center">Selecciona Método de Entrega</h2>
               
-              {/* SELECTOR LOGÍSTICO (Pilar Central) */}
               <div className="grid grid-cols-2 gap-4 mb-8">
                 <button 
                   onClick={() => gestionarMetodo('recoger')}
@@ -201,7 +197,6 @@ export default function CarritoPage() {
                 </button>
               </div>
 
-              {/* RUTA A: PICK-UP */}
               {metodoEntrega === 'recoger' && (
                 <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4">
                   <p className="text-[10px] uppercase text-white/50 tracking-widest mb-2 border-b border-white/10 pb-2">Establecer hora de recolección</p>
@@ -215,11 +210,9 @@ export default function CarritoPage() {
                 </div>
               )}
 
-              {/* RUTA B: DOMICILIO */}
               {metodoEntrega === 'domicilio' && (
                 <div className="animate-in fade-in slide-in-from-bottom-4">
                   
-                  {/* B.1 Interrupción: Formulario Nuevo Domicilio */}
                   {mostrarFormDomicilio ? (
                     <div className="space-y-4 bg-black/40 p-5 rounded-2xl border border-dashed border-[#CBA36A]/30">
                        <p className="text-[10px] uppercase text-[#CBA36A] font-bold tracking-widest mb-4 flex items-center gap-2"><MapPin size={14}/> Alta de Dirección</p>
@@ -232,11 +225,21 @@ export default function CarritoPage() {
                        <div className="grid grid-cols-2 gap-3">
                          <div className="relative">
                            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-white/40 text-xs font-bold">#</span>
-                           <input type="text" placeholder="Exterior / Interior" value={formDom.numero} onChange={e=>setFormDom({...formDom, numero: e.target.value})} className="w-full bg-[#050A06] border border-white/10 py-3 pl-10 pr-4 text-sm rounded-xl text-white focus:border-[#CBA36A]" />
+                           <input type="text" placeholder="Ext / Int" value={formDom.numero} onChange={e=>setFormDom({...formDom, numero: e.target.value})} className="w-full bg-[#050A06] border border-white/10 py-3 pl-10 pr-4 text-sm rounded-xl text-white focus:border-[#CBA36A]" />
                          </div>
+                         
+                         {/* 🛠️ APLICACIÓN DE RESTRICCIÓN DE ZONAS */}
                          <div className="relative">
-                           <Building size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/40" />
-                           <input type="text" placeholder="Col / Fracc." value={formDom.fraccionamiento} onChange={e=>setFormDom({...formDom, fraccionamiento: e.target.value})} className="w-full bg-[#050A06] border border-white/10 py-3 pl-10 pr-4 text-sm rounded-xl text-white focus:border-[#CBA36A]" />
+                           <Building size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/40 z-10 pointer-events-none" />
+                           <select 
+                             value={formDom.fraccionamiento} 
+                             onChange={e=>setFormDom({...formDom, fraccionamiento: e.target.value})} 
+                             className="w-full bg-[#050A06] border border-white/10 py-3 pl-10 pr-4 text-sm rounded-xl text-white focus:border-[#CBA36A] appearance-none cursor-pointer"
+                           >
+                             <option value="" disabled>Selecciona zona...</option>
+                             <option value="Los Molinos">Los Molinos</option>
+                             <option value="Los Tréboles">Los Tréboles</option>
+                           </select>
                          </div>
                        </div>
                        
@@ -245,19 +248,18 @@ export default function CarritoPage() {
                          <textarea placeholder="Referencias (Ej. Casa blanca con portón negro)" value={formDom.notas} onChange={e=>setFormDom({...formDom, notas: e.target.value})} rows={2} className="w-full bg-[#050A06] border border-white/10 py-3 pl-12 pr-4 text-sm rounded-xl text-white focus:border-[#CBA36A] resize-none"></textarea>
                        </div>
 
-                       <button onClick={guardarNuevoDomicilio} className="w-full border border-[#CBA36A] text-[#CBA36A] py-3 rounded-xl font-bold text-[10px] uppercase tracking-widest hover:bg-[#CBA36A]/10">
+                       <button onClick={guardarNuevoDomicilio} className="w-full border border-[#CBA36A] text-[#CBA36A] py-3 rounded-xl font-bold text-[10px] uppercase tracking-widest hover:bg-[#CBA36A]/10 transition-colors">
                          Guardar Domicilio
                        </button>
                     </div>
                   ) : (
-                    /* B.2 Flujo Continuo: Domicilio Existente */
                     domicilioGuardado && (
                       <div className="space-y-6">
                         <div className="bg-[#050A06] border border-white/10 p-4 rounded-2xl flex justify-between items-start">
                           <div>
                             <p className="text-xs font-bold text-white flex items-center gap-2 mb-1"><MapPin size={12} className="text-[#CBA36A]"/> Entregar a:</p>
                             <p className="text-sm text-white/80">{domicilioGuardado.calle} #{domicilioGuardado.numero}</p>
-                            <p className="text-[10px] text-white/50 uppercase">{domicilioGuardado.fraccionamiento}</p>
+                            <p className="text-[10px] text-[#CBA36A] font-bold uppercase mt-1 px-2 py-0.5 bg-[#CBA36A]/10 inline-block rounded">{domicilioGuardado.fraccionamiento}</p>
                           </div>
                           <button onClick={() => setMostrarFormDomicilio(true)} className="text-[9px] uppercase tracking-widest text-[#CBA36A] border-b border-[#CBA36A]/30">Cambiar</button>
                         </div>
@@ -278,7 +280,6 @@ export default function CarritoPage() {
   );
 }
 
-// Micro-componente de icono omitido en importación superior
 function Store(props: any) {
   return (
     <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

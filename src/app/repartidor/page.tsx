@@ -175,7 +175,7 @@ export default function DeliveryDashboard() {
                   <MapPin className="text-red-500 shrink-0 mt-0.5" size={18} />
                   <div>
                     <p className="text-sm font-bold text-white">{pedido.domicilio?.calle} #{pedido.domicilio?.numero}</p>
-                    <p className="text-xs text-white/60">Colonia {pedido.domicilio?.colonia}</p>
+                    <p className="text-xs text-white/60">Zona {pedido.domicilio?.fraccionamiento}</p>
                     {pedido.domicilio?.referencias && (
                       <p className="text-[10px] text-yellow-500 mt-2 bg-yellow-500/10 p-2 rounded">
                         <span className="font-bold">NOTA:</span> {pedido.domicilio.referencias}
