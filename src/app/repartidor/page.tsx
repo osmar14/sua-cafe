@@ -38,12 +38,12 @@ export default function DeliveryDashboard() {
   }, [autorizado]);
 
   async function fetchPedidos() {
-    // Escaneamos solo pedidos pagados y designados para entrega a domicilio
+    // 🛠️ CORRECCIÓN: Escaneamos pedidos 'preparados' por la cocina
     const { data } = await supabase
       .from('pedidos')
       .select('*')
       .eq('tipo_entrega', 'domicilio')
-      .eq('estado', 'pagado')
+      .eq('estado', 'preparado')
       .order('created_at', { ascending: true });
       
     setPedidos(data || []);
@@ -75,18 +75,17 @@ export default function DeliveryDashboard() {
   };
 
   const marcarComoEntregado = async (id_pedido: string) => {
-    if (!confirm('¿Confirmar entrega y eliminar orden de la matriz?')) return;
+    if (!confirm('¿Confirmar entrega y notificar a la base central?')) return;
     
     setProcesandoId(id_pedido);
     try {
       const res = await fetch('/api/delivery/entregar', {
-        method: 'DELETE',
+        method: 'PATCH', // 🛠️ CORRECCIÓN: Ajustado a PATCH
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id_pedido })
       });
 
       if (res.ok) {
-        // Retiramos el pedido de la interfaz inmediatamente
         setPedidos(prev => prev.filter(p => p.id !== id_pedido));
       } else {
         const data = await res.json();
@@ -99,7 +98,6 @@ export default function DeliveryDashboard() {
     }
   };
 
-  // --- INTERFAZ DE CIBERSEGURIDAD (LOGIN) ---
   if (!autorizado) {
     return (
       <main className="min-h-screen bg-[#060B08] flex items-center justify-center p-6 font-sans">
@@ -136,7 +134,6 @@ export default function DeliveryDashboard() {
     );
   }
 
-  // --- PANEL DE CONTROL DE REPARTO ---
   return (
     <main className="min-h-screen bg-[#060B08] pb-24 font-sans text-white">
       <header className="bg-[#0A130D] border-b border-[#CBA36A]/20 p-5 sticky top-0 z-50 flex justify-between items-center shadow-lg">
@@ -194,7 +191,7 @@ export default function DeliveryDashboard() {
                 className="w-full bg-green-600/20 hover:bg-green-600 border border-green-500 text-green-400 hover:text-white py-4 rounded-xl font-black text-xs uppercase tracking-widest transition-all active:scale-95 flex items-center justify-center gap-2"
               >
                 {procesandoId === pedido.id ? <Loader2 className="animate-spin" size={18} /> : <CheckCircle size={18} />}
-                {procesandoId === pedido.id ? 'Limpiando Matriz...' : 'Confirmar Entrega'}
+                {procesandoId === pedido.id ? 'Sincronizando...' : 'Confirmar Entrega'}
               </button>
             </div>
           ))

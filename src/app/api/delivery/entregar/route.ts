@@ -3,9 +3,8 @@ import { createClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
 import jwt from 'jsonwebtoken';
 
-export async function DELETE(request: Request) {
+export async function PATCH(request: Request) {
   try {
-    // 🛠️ CORRECCIÓN: Inyección de 'await' en la validación
     const cookieStore = await cookies();
     const token = cookieStore.get('delivery_session');
     
@@ -21,14 +20,17 @@ export async function DELETE(request: Request) {
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
 
-    // Ejecución de Borrado Táctico
-    const { error } = await supabaseAdmin.from('pedidos').delete().eq('id', id_pedido);
+    // 🛠️ CORRECCIÓN: Actualización táctica en lugar de borrado
+    const { error } = await supabaseAdmin
+      .from('pedidos')
+      .update({ estado: 'entregado' })
+      .eq('id', id_pedido);
 
     if (error) throw error;
 
     return NextResponse.json({ exito: true });
   } catch (error: any) {
-    console.error('Fallo en eliminación:', error);
-    return NextResponse.json({ error: 'Error en la matriz de borrado' }, { status: 500 });
+    console.error('Fallo en actualización:', error);
+    return NextResponse.json({ error: 'Error en la matriz de actualización' }, { status: 500 });
   }
 }
