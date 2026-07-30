@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import { 
   ShoppingCart, ArrowLeft, Coffee, CupSoda, Snowflake, 
-  Croissant, LayoutGrid, X, Check, Clock, AlertCircle 
+  Croissant, LayoutGrid, X, Check, Clock, AlertCircle, Ban 
 } from 'lucide-react';
 
 // Subcomponente para manejar los parámetros de búsqueda sin romper la página
@@ -45,7 +45,7 @@ function MenuContent() {
       const { data: config } = await supabase.from('configuracion_tienda').select('tienda_abierta').eq('id', 1).single();
       if (config) setTiendaAbierta(config.tienda_abierta);
 
-      // 2. Cargar Menú
+      // 2. Cargar Menú (El select('*') ya trae la columna 'disponible')
       let peticion = supabase.from('productos').select('*');
       
       if (categoria === 'caliente') peticion = peticion.ilike('categoria', '%alient%');
@@ -119,15 +119,20 @@ function MenuContent() {
     mostrarNotificacion(`👍 ${itemSeleccionado.nombre} agregado a tu cuenta`);
   };
 
-  // 🛡️ ESCUDO DE INTERCEPCIÓN EN EL MODAL
+  // 🛡️ ESCUDO DE INTERCEPCIÓN EN EL MODAL (Doble validación de seguridad)
   const abrirModal = (producto: any) => {
     if (!tiendaAbierta) {
       mostrarNotificacion('🔴 Cocina Cerrada. No se pueden procesar órdenes.');
       return;
     }
 
+    if (producto.disponible === false) {
+      mostrarNotificacion('❌ Producto actualmente agotado.');
+      return;
+    }
+
     if (!validarHorarioItem(producto.hora_inicio, producto.hora_fin)) {
-      mostrarNotificacion('⏳ Este producto se encuentra fuera de su horario especial.');
+      mostrarNotificacion(`⏳ Fuera de servicio. Disponible de ${formatearHora(producto.hora_inicio)} a ${formatearHora(producto.hora_fin)}.`);
       return;
     }
 
@@ -170,7 +175,7 @@ function MenuContent() {
       </header>
 
       <div className={`fixed bottom-10 left-1/2 -translate-x-1/2 z-[200] bg-[#CBA36A] text-[#0A130D] px-8 py-3 rounded-full font-black text-[10px] uppercase tracking-widest shadow-[0_10px_30px_rgba(0,0,0,0.8)] flex items-center gap-2 transition-all duration-500 transform ${notificacion.visible ? 'translate-y-0 opacity-100' : 'translate-y-20 opacity-0 pointer-events-none'}`}>
-        {notificacion.mensaje.includes('🔴') || notificacion.mensaje.includes('⏳') ? null : <Check size={16} />} {notificacion.mensaje}
+        {notificacion.mensaje.includes('🔴') || notificacion.mensaje.includes('⏳') || notificacion.mensaje.includes('❌') ? null : <Check size={16} />} {notificacion.mensaje}
       </div>
 
       <div className="relative z-10 max-w-6xl mx-auto px-6 pt-32 pb-32">
@@ -205,32 +210,40 @@ function MenuContent() {
 
         <div key={categoria} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
           {productos.map((producto) => {
+            // 🛠️ MOTOR LÓGICO DE DISPONIBILIDAD
             const enHorario = validarHorarioItem(producto.hora_inicio, producto.hora_fin);
-            const disponible = tiendaAbierta && enHorario;
+            const hayStock = producto.disponible !== false; // Evalúa la columna del Admin
+            const sePuedeComprar = tiendaAbierta && enHorario && hayStock;
 
             return (
-              <div key={producto.id} className={`bg-[#050A06]/80 backdrop-blur-xl p-6 rounded-3xl border border-[#CBA36A]/20 shadow-xl flex flex-col justify-between group transition-all duration-700 ${!enHorario ? 'opacity-50 grayscale' : 'hover:border-[#CBA36A]/50'}`}>
+              <div key={producto.id} className={`bg-[#050A06]/80 backdrop-blur-xl p-6 rounded-3xl border border-[#CBA36A]/20 shadow-xl flex flex-col justify-between group transition-all duration-700 ${!sePuedeComprar ? 'opacity-50 grayscale' : 'hover:border-[#CBA36A]/50'}`}>
                 <div>
                   <div className="flex justify-between items-start mb-4">
                     <span className="bg-[#CBA36A]/10 text-[#CBA36A] px-3 py-1 rounded-md text-[8px] font-black uppercase tracking-widest border border-[#CBA36A]/20">{producto.categoria}</span>
                     
-                    {/* ETIQUETA DE TIEMPO EFÍMERO */}
-                    {!enHorario && producto.hora_inicio && (
+                    {/* 🚦 ETIQUETAS DINÁMICAS DE ESTADO */}
+                    {!hayStock ? (
+                      <span className="text-[8px] bg-red-950 text-red-500 px-2 py-1 rounded border border-red-500/30 font-black uppercase tracking-widest flex items-center gap-1 shadow-lg">
+                        <Ban size={10} /> Agotado
+                      </span>
+                    ) : !enHorario && producto.hora_inicio ? (
                       <span className="text-[8px] bg-[#0A130D] text-[#CBA36A] px-2 py-1 rounded border border-[#CBA36A]/30 font-black uppercase tracking-widest flex items-center gap-1 shadow-lg">
                         <Clock size={10} /> De {formatearHora(producto.hora_inicio)} a {formatearHora(producto.hora_fin)}
                       </span>
-                    )}
+                    ) : null}
                   </div>
+                  
                   <h3 className="text-xl font-serif text-white mb-2">{producto.nombre}</h3>
                   <p className="text-sm text-white/50 font-light mb-6 line-clamp-2">Preparación exacta de Súa.</p>
                 </div>
+                
                 <div className="flex items-center justify-between border-t border-[#CBA36A]/10 pt-4 mt-auto">
                   <span className="text-2xl font-serif text-[#CBA36A]">${producto.precio_venta}</span>
                   <button 
                     onClick={() => abrirModal(producto)} 
-                    disabled={!disponible}
-                    className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${disponible ? 'bg-[#CBA36A]/10 border border-[#CBA36A]/30 text-[#CBA36A] hover:bg-[#CBA36A] hover:text-[#0A130D] active:scale-90' : 'bg-white/5 border border-white/10 text-white/30 cursor-not-allowed'}`}
-                    title={!tiendaAbierta ? 'Tienda Cerrada' : !enHorario ? 'Fuera de Horario' : 'Agregar'}
+                    disabled={!sePuedeComprar}
+                    className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${sePuedeComprar ? 'bg-[#CBA36A]/10 border border-[#CBA36A]/30 text-[#CBA36A] hover:bg-[#CBA36A] hover:text-[#0A130D] active:scale-90' : 'bg-white/5 border border-white/10 text-white/30 cursor-not-allowed'}`}
+                    title={!tiendaAbierta ? 'Tienda Cerrada' : !hayStock ? 'Agotado' : !enHorario ? 'Fuera de Horario' : 'Agregar'}
                   >
                     +
                   </button>
@@ -240,8 +253,10 @@ function MenuContent() {
           })}
         </div>
 
+        {/* MODAL DE PERSONALIZACIÓN */}
         {itemSeleccionado && (
           <div className="fixed inset-0 z-[100] flex items-end md:items-center justify-center bg-black/80 backdrop-blur-sm animate-in fade-in duration-300">
+            {/* El interior del modal se mantiene intacto, ya que interceptamos el error antes de abrirlo */}
             <div className="bg-[#0A130D] border border-[#CBA36A]/30 p-8 rounded-t-[2.5rem] md:rounded-[2.5rem] w-full max-w-md relative animate-in slide-in-from-bottom-10 md:slide-in-from-bottom-0 shadow-[0_0_50px_rgba(203,163,106,0.1)]">
               <button onClick={() => { setItemSeleccionado(null); setExtraDeslactosada(false); setExtraShot(false); setExtraCrema(false); }} className="absolute top-6 right-6 text-white/50 hover:text-white"><X /></button>
               <h2 className="text-3xl font-serif mb-1 text-[#CBA36A]">{itemSeleccionado.nombre}</h2>
@@ -286,7 +301,7 @@ export default function MenuPage() {
         <div className="absolute inset-0 bg-gradient-to-b from-[#060B08]/40 via-[#060B08]/80 to-[#060B08]"></div>
       </div>
 
-      <Suspense fallback={<div className="pt-40 text-center text-white font-serif italic animate-pulse">Cargando la magia de Súa...</div>}>
+      <Suspense fallback={<div className="pt-40 text-center text-white font-serif italic animate-pulse">Cargando la matriz de Súa...</div>}>
         <MenuContent />
       </Suspense>
     </main>
