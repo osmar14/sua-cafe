@@ -19,7 +19,7 @@ export default function AdminPage() {
   const [guardando, setGuardando] = useState(false);
   const [mensaje, setMensaje] = useState('');
 
-  // Formularios con variables de tiempo
+  // Formularios
   const [creandoProducto, setCreandoProducto] = useState(false);
   const [nuevoProducto, setNuevoProducto] = useState({
     nombre: '', precio_venta: '', categoria: 'caliente', horario: 'siempre', hora_inicio: '', hora_fin: ''
@@ -88,7 +88,8 @@ export default function AdminPage() {
         categoria: nuevoProducto.categoria,
         horario: nuevoProducto.horario,
         hora_inicio: parseTime(nuevoProducto.hora_inicio),
-        hora_fin: parseTime(nuevoProducto.hora_fin)
+        hora_fin: parseTime(nuevoProducto.hora_fin),
+        disponible: true // 🛠️ Por defecto, al crearlo está disponible
       }]);
       if (error) throw error;
       setNuevoProducto({ nombre: '', precio_venta: '', categoria: 'caliente', horario: 'siempre', hora_inicio: '', hora_fin: '' });
@@ -117,12 +118,14 @@ export default function AdminPage() {
         const precioNumerico = Number(p.precio_venta);
         if (isNaN(precioNumerico)) throw new Error(`El precio de ${p.nombre} es inválido.`);
 
+        // 🛠️ Guardamos los horarios, el precio y si está DISPONIBLE
         const { error } = await supabase.from('productos').update({
           precio_venta: precioNumerico,
           imagen_url: p.imagen_url,
           horario: p.horario,
           hora_inicio: parseTime(p.hora_inicio || ''),
-          hora_fin: parseTime(p.hora_fin || '')
+          hora_fin: parseTime(p.hora_fin || ''),
+          disponible: p.disponible // Inyección en DB
         }).eq('id', p.id);
 
         if (error) conteoErrores++;
@@ -175,7 +178,7 @@ export default function AdminPage() {
       <main className="min-h-screen bg-[#060B08] text-[#CBA36A] p-4 md:p-12 font-sans relative">
         <div className="fixed inset-0 z-0 bg-[url('/bg-bosque.png')] opacity-5 bg-cover pointer-events-none grayscale"></div>
         
-        <div className="relative z-10 max-w-6xl mx-auto space-y-8 pb-32">
+        <div className="relative z-10 max-w-[1400px] mx-auto space-y-8 pb-32">
           
           <header className="flex flex-col lg:flex-row justify-between items-center gap-6 border-b border-[#CBA36A]/20 pb-8">
             <div className="text-center lg:text-left">
@@ -243,16 +246,17 @@ export default function AdminPage() {
               <div className="xl:col-span-3 space-y-4">
                 <div className="flex justify-between items-center bg-[#0A130D] p-5 rounded-[2rem] border border-white/10">
                   <p className="text-[10px] font-black uppercase text-white/50 tracking-widest">Editor de Precios y Tiempos</p>
-                  <button onClick={guardarCambiosMenu} disabled={guardando} className="bg-white/10 text-white px-6 py-2 rounded-full font-black text-[10px] uppercase tracking-widest hover:bg-[#CBA36A] hover:text-black transition-all">
+                  <button onClick={guardarCambiosMenu} disabled={guardando} className="bg-white/10 text-white px-6 py-2 rounded-full font-black text-[10px] uppercase tracking-widest hover:bg-[#CBA36A] hover:text-black transition-all shadow-[0_0_15px_rgba(203,163,106,0.2)]">
                     {guardando ? 'Guardando...' : 'Guardar Cambios'}
                   </button>
                 </div>
                 
                 <div className="bg-[#0A130D] rounded-[2rem] border border-white/5 overflow-hidden overflow-x-auto">
-                  <table className="w-full text-left border-collapse min-w-[700px]">
+                  <table className="w-full text-left border-collapse min-w-[800px]">
                     <thead>
                       <tr className="bg-white/5 border-b border-white/10 text-[10px] font-black uppercase tracking-widest text-[#CBA36A]">
                         <th className="p-4">Producto</th>
+                        <th className="p-4 w-24 text-center">Disp.</th>
                         <th className="p-4 w-24">Precio</th>
                         <th className="p-4 w-24">Inicio</th>
                         <th className="p-4 w-24">Fin</th>
@@ -262,10 +266,19 @@ export default function AdminPage() {
                     </thead>
                     <tbody className="text-sm">
                       {productos.map((p, index) => (
-                        <tr key={p.id} className="border-b border-white/5 hover:bg-white/5 transition-colors group">
+                        <tr key={p.id} className={`border-b border-white/5 hover:bg-white/5 transition-colors group ${!p.disponible ? 'opacity-50' : ''}`}>
                           <td className="p-4">
                             <p className="font-bold text-white leading-none mb-1">{p.nombre}</p>
                             <span className="text-[8px] uppercase px-1.5 py-0.5 bg-white/5 rounded text-white/40 font-black">{p.categoria}</span>
+                          </td>
+                          {/* 🛠️ BOTÓN TOGGLE DE DISPONIBILIDAD (STOCK) */}
+                          <td className="p-4 text-center">
+                            <button 
+                              onClick={() => actualizarProductoLocal(index, 'disponible', !p.disponible)}
+                              className={`relative w-10 h-5 rounded-full transition-colors duration-300 mx-auto ${p.disponible ? 'bg-green-500' : 'bg-red-500/50'}`}
+                            >
+                              <div className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform duration-300 ${p.disponible ? 'translate-x-5' : 'translate-x-0'}`}></div>
+                            </button>
                           </td>
                           <td className="p-4 font-serif">
                             <input type="number" value={p.precio_venta} onChange={(e) => actualizarProductoLocal(index, 'precio_venta', e.target.value)} className="w-full bg-[#050A06] border border-white/10 p-2 rounded-lg text-white text-lg outline-none focus:border-[#CBA36A]" />
@@ -296,6 +309,7 @@ export default function AdminPage() {
           {/* 📢 GESTOR DE PROMOS */}
           {pestana === 'promos' && (
              <div className="grid grid-cols-1 md:grid-cols-3 gap-8 animate-in fade-in duration-500">
+                {/* ... (Código de promos sin alteraciones) ... */}
                 <div className="md:col-span-1 bg-[#0A130D] p-6 rounded-[2.5rem] border border-[#CBA36A]/30 h-fit sticky top-32 shadow-2xl">
                    <h2 className="text-xl font-serif text-white mb-6 flex items-center gap-2"><Tag size={20}/> Nueva Promo</h2>
                    <form onSubmit={handleCrearPromo} className="space-y-4">
