@@ -44,17 +44,19 @@ export default function ProduccionPage() {
       const qTamano = Number(tamanoEnvase);
       const cTotal = Number(costoTotalFactura);
 
-      // Ecuaciones de Costeo Exacto
+     // Ecuaciones de Costeo Exacto
       const costoPorEmpaque = cTotal / qEnvases; 
-      const costoAtomico = cTotal / (qEnvases * qTamano);
       const stockInicialTotal = qEnvases * qTamano;
+      
+      // La variable 'costoAtomico' calculada en React ya no es necesaria aquí,
+      // la base de datos ejecutará el cálculo de manera autónoma.
 
       const { error } = await supabase.from('insumos').insert([{
         nombre: nombre.trim(),
         unidad_medida: unidadBase,
         costo_paquete: costoPorEmpaque,
         cantidad_por_paquete: qTamano,
-        costo_por_unidad: costoAtomico,
+        // costo_por_unidad: costoAtomico,  <-- LÍNEA ELIMINADA PARA EVITAR EL CHOQUE DE AUTORIDAD
         stock_actual: stockInicialTotal
       }]);
 
