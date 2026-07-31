@@ -1,8 +1,7 @@
-// src/app/carrito/page.tsx
 'use client';
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { ArrowLeft, Trash2, CheckCircle, Clock, MapPin, Truck, Home, Building, FileText, Check } from 'lucide-react';
+import { ArrowLeft, Trash2, CheckCircle, Clock, MapPin, Truck, Home, Building, FileText, CreditCard, Banknote } from 'lucide-react';
 import Link from 'next/link';
 
 export default function CarritoPage() {
@@ -14,24 +13,25 @@ export default function CarritoPage() {
   const [metodoEntrega, setMetodoEntrega] = useState<'domicilio' | 'recoger' | null>(null);
   const [hora, setHora] = useState('');
   
-  // 3. Estados de Domicilio Dinámico (JSONB en Supabase)
+  // 3. Estados de Domicilio Dinámico
   const [domicilioGuardado, setDomicilioGuardado] = useState<any>(null);
   const [mostrarFormDomicilio, setMostrarFormDomicilio] = useState(false);
-  // Inicializamos fraccionamiento vacío para forzar la selección en el dropdown
   const [formDom, setFormDom] = useState({ calle: '', numero: '', fraccionamiento: '', notas: '' });
 
-  // 4. Estados de Sistema
+  // 4. Estados de PAGO (Nuevo Módulo)
+  const [metodoPago, setMetodoPago] = useState<'tarjeta' | 'efectivo' | null>(null);
+  const [montoPago, setMontoPago] = useState<string>('');
+
+  // 5. Estados de Sistema
   const [enviando, setEnviando] = useState(false);
   const [exito, setExito] = useState(false);
   const [errorSesion, setErrorSesion] = useState(false);
 
   useEffect(() => {
     async function inicializarCarrito() {
-      // Cargar productos
       const g = localStorage.getItem('sua_carrito');
       if (g) setCarrito(JSON.parse(g));
       
-      // Validar identidad del cliente
       try {
         const res = await fetch('/api/auth/me');
         if (res.ok) {
@@ -52,6 +52,22 @@ export default function CarritoPage() {
   }, []);
 
   const total = carrito.reduce((acc, i) => acc + Number(i.precio_final || i.precio_venta || 0), 0);
+
+  // --- 🧠 ALGORITMO DE SUGERENCIAS DE EFECTIVO ---
+  const sugerenciasEfectivo = (() => {
+    if (total === 0) return [];
+    const sugerencias = [];
+    const mult50 = Math.ceil(total / 50) * 50;
+    if (mult50 > total) sugerencias.push(mult50);
+    
+    const mult100 = Math.ceil(total / 100) * 100;
+    if (mult100 > total && mult100 !== mult50) sugerencias.push(mult100);
+    
+    if (total < 200 && !sugerencias.includes(200)) sugerencias.push(200);
+    if (total < 500 && !sugerencias.includes(500)) sugerencias.push(500);
+    
+    return Array.from(new Set(sugerencias)).sort((a, b) => a - b).slice(0, 3);
+  })();
 
   // --- 🚚 LÓGICA DE INTERCEPCIÓN LOGÍSTICA ---
   const gestionarMetodo = (metodo: 'domicilio' | 'recoger') => {
@@ -79,8 +95,11 @@ export default function CarritoPage() {
   };
 
   const enviarPedido = async () => {
+    // Validaciones Estrictas
     if (metodoEntrega === 'recoger' && !hora) return alert("Indica la hora a la que pasarás.");
     if (metodoEntrega === 'domicilio' && !domicilioGuardado && !mostrarFormDomicilio) return alert("Falta el domicilio.");
+    if (!metodoPago) return alert("Por favor, selecciona un método de pago.");
+    if (metodoPago === 'efectivo' && Number(montoPago) < total) return alert("El monto ingresado no cubre el total de la orden.");
     
     setEnviando(true);
 
@@ -93,7 +112,9 @@ export default function CarritoPage() {
         domicilio: metodoEntrega === 'domicilio' ? domicilioGuardado : null,
         items: carrito,
         total: total,
-        estado: 'pendiente' // El ciclo que programamos inicia aquí
+        estado: 'pendiente',
+        metodo_pago: metodoPago,
+        monto_efectivo: metodoPago === 'efectivo' ? Number(montoPago) : null
       }]);
 
       if (error) throw error;
@@ -102,7 +123,8 @@ export default function CarritoPage() {
       setExito(true);
 
     } catch (error) {
-      alert("Hubo un error al procesar tu pedido.");
+      alert("Hubo un error al procesar tu pedido. Verifica la consola.");
+      console.error(error);
     } finally {
       setEnviando(false);
     }
@@ -133,6 +155,9 @@ export default function CarritoPage() {
       </Link>
     </main>
   );
+
+  // Variable para bloquear el botón dinámicamente
+  const esPagoInvalido = metodoPago === 'efectivo' && Number(montoPago) < total;
 
   return (
     <main className="min-h-screen bg-[#060B08] text-[#CBA36A] p-6 font-sans">
@@ -197,6 +222,7 @@ export default function CarritoPage() {
                 </button>
               </div>
 
+              {/* MÓDULO DE RECOGER */}
               {metodoEntrega === 'recoger' && (
                 <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4">
                   <p className="text-[10px] uppercase text-white/50 tracking-widest mb-2 border-b border-white/10 pb-2">Establecer hora de recolección</p>
@@ -204,72 +230,133 @@ export default function CarritoPage() {
                     <Clock size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#CBA36A]" />
                     <input type="time" value={hora} onChange={e=>setHora(e.target.value)} className="w-full bg-[#050A06] border border-white/10 py-4 pl-12 pr-4 rounded-xl text-white outline-none focus:border-[#CBA36A]" />
                   </div>
-                  <button onClick={enviarPedido} disabled={enviando} className="w-full bg-[#CBA36A] text-black py-5 rounded-2xl font-black text-[11px] uppercase tracking-widest mt-6">
-                    {enviando ? 'Enviando Ticket...' : 'Confirmar Pick-Up'}
-                  </button>
                 </div>
               )}
 
+              {/* MÓDULO DE DOMICILIO */}
               {metodoEntrega === 'domicilio' && (
                 <div className="animate-in fade-in slide-in-from-bottom-4">
-                  
                   {mostrarFormDomicilio ? (
                     <div className="space-y-4 bg-black/40 p-5 rounded-2xl border border-dashed border-[#CBA36A]/30">
                        <p className="text-[10px] uppercase text-[#CBA36A] font-bold tracking-widest mb-4 flex items-center gap-2"><MapPin size={14}/> Alta de Dirección</p>
-                       
                        <div className="relative">
                          <Home size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/40" />
                          <input type="text" placeholder="Calle / Avenida" value={formDom.calle} onChange={e=>setFormDom({...formDom, calle: e.target.value})} className="w-full bg-[#050A06] border border-white/10 py-3 pl-12 pr-4 text-sm rounded-xl text-white focus:border-[#CBA36A]" />
                        </div>
-                       
                        <div className="grid grid-cols-2 gap-3">
                          <div className="relative">
                            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-white/40 text-xs font-bold">#</span>
                            <input type="text" placeholder="Ext / Int" value={formDom.numero} onChange={e=>setFormDom({...formDom, numero: e.target.value})} className="w-full bg-[#050A06] border border-white/10 py-3 pl-10 pr-4 text-sm rounded-xl text-white focus:border-[#CBA36A]" />
                          </div>
-                         
-                         {/* 🛠️ APLICACIÓN DE RESTRICCIÓN DE ZONAS */}
                          <div className="relative">
                            <Building size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/40 z-10 pointer-events-none" />
-                           <select 
-                             value={formDom.fraccionamiento} 
-                             onChange={e=>setFormDom({...formDom, fraccionamiento: e.target.value})} 
-                             className="w-full bg-[#050A06] border border-white/10 py-3 pl-10 pr-4 text-sm rounded-xl text-white focus:border-[#CBA36A] appearance-none cursor-pointer"
-                           >
+                           <select value={formDom.fraccionamiento} onChange={e=>setFormDom({...formDom, fraccionamiento: e.target.value})} className="w-full bg-[#050A06] border border-white/10 py-3 pl-10 pr-4 text-sm rounded-xl text-white focus:border-[#CBA36A] appearance-none cursor-pointer">
                              <option value="" disabled>Selecciona zona...</option>
                              <option value="Los Molinos">Los Molinos</option>
                              <option value="Los Tréboles">Los Tréboles</option>
                            </select>
                          </div>
                        </div>
-                       
                        <div className="relative">
                          <FileText size={16} className="absolute left-4 top-4 text-white/40" />
-                         <textarea placeholder="Referencias (Ej. Casa blanca con portón negro)" value={formDom.notas} onChange={e=>setFormDom({...formDom, notas: e.target.value})} rows={2} className="w-full bg-[#050A06] border border-white/10 py-3 pl-12 pr-4 text-sm rounded-xl text-white focus:border-[#CBA36A] resize-none"></textarea>
+                         <textarea placeholder="Referencias" value={formDom.notas} onChange={e=>setFormDom({...formDom, notas: e.target.value})} rows={2} className="w-full bg-[#050A06] border border-white/10 py-3 pl-12 pr-4 text-sm rounded-xl text-white focus:border-[#CBA36A] resize-none"></textarea>
                        </div>
-
                        <button onClick={guardarNuevoDomicilio} className="w-full border border-[#CBA36A] text-[#CBA36A] py-3 rounded-xl font-bold text-[10px] uppercase tracking-widest hover:bg-[#CBA36A]/10 transition-colors">
                          Guardar Domicilio
                        </button>
                     </div>
                   ) : (
                     domicilioGuardado && (
-                      <div className="space-y-6">
-                        <div className="bg-[#050A06] border border-white/10 p-4 rounded-2xl flex justify-between items-start">
-                          <div>
-                            <p className="text-xs font-bold text-white flex items-center gap-2 mb-1"><MapPin size={12} className="text-[#CBA36A]"/> Entregar a:</p>
-                            <p className="text-sm text-white/80">{domicilioGuardado.calle} #{domicilioGuardado.numero}</p>
-                            <p className="text-[10px] text-[#CBA36A] font-bold uppercase mt-1 px-2 py-0.5 bg-[#CBA36A]/10 inline-block rounded">{domicilioGuardado.fraccionamiento}</p>
-                          </div>
-                          <button onClick={() => setMostrarFormDomicilio(true)} className="text-[9px] uppercase tracking-widest text-[#CBA36A] border-b border-[#CBA36A]/30">Cambiar</button>
+                      <div className="bg-[#050A06] border border-white/10 p-4 rounded-2xl flex justify-between items-start">
+                        <div>
+                          <p className="text-xs font-bold text-white flex items-center gap-2 mb-1"><MapPin size={12} className="text-[#CBA36A]"/> Entregar a:</p>
+                          <p className="text-sm text-white/80">{domicilioGuardado.calle} #{domicilioGuardado.numero}</p>
+                          <p className="text-[10px] text-[#CBA36A] font-bold uppercase mt-1 px-2 py-0.5 bg-[#CBA36A]/10 inline-block rounded">{domicilioGuardado.fraccionamiento}</p>
                         </div>
-                        
-                        <button onClick={enviarPedido} disabled={enviando} className="w-full bg-[#CBA36A] text-black py-5 rounded-2xl font-black text-[11px] uppercase tracking-widest shadow-xl active:scale-95 transition-all">
-                           {enviando ? 'Conectando con Repartidor...' : 'Confirmar Pedido'}
-                        </button>
+                        <button onClick={() => setMostrarFormDomicilio(true)} className="text-[9px] uppercase tracking-widest text-[#CBA36A] border-b border-[#CBA36A]/30">Cambiar</button>
                       </div>
                     )
                   )}
+                </div>
+              )}
+
+              {/* ========================================== */}
+              {/* MÓDULO DE PAGO CIBERNÉTICO                 */}
+              {/* ========================================== */}
+              {((metodoEntrega === 'recoger' && hora) || (metodoEntrega === 'domicilio' && domicilioGuardado && !mostrarFormDomicilio)) && (
+                <div className="mt-8 pt-8 border-t border-white/10 animate-in fade-in">
+                  <h3 className="text-sm font-serif text-[#CBA36A] mb-4 text-center">Forma de Pago (Contra Entrega)</h3>
+                  
+                  <div className="grid grid-cols-2 gap-4 mb-4">
+                    <button 
+                      onClick={() => setMetodoPago('tarjeta')}
+                      className={`flex flex-col items-center justify-center p-4 rounded-xl border transition-all ${metodoPago === 'tarjeta' ? 'bg-[#CBA36A]/10 border-[#CBA36A] text-[#CBA36A]' : 'bg-white/5 border-white/5 text-white/40 hover:text-white'}`}
+                    >
+                      <CreditCard size={20} className="mb-2" />
+                      <span className="text-[10px] font-black uppercase tracking-widest">Tarjeta / Terminal</span>
+                    </button>
+                    <button 
+                      onClick={() => { setMetodoPago('efectivo'); setMontoPago(total.toString()); }}
+                      className={`flex flex-col items-center justify-center p-4 rounded-xl border transition-all ${metodoPago === 'efectivo' ? 'bg-[#CBA36A]/10 border-[#CBA36A] text-[#CBA36A]' : 'bg-white/5 border-white/5 text-white/40 hover:text-white'}`}
+                    >
+                      <Banknote size={20} className="mb-2" />
+                      <span className="text-[10px] font-black uppercase tracking-widest">Efectivo</span>
+                    </button>
+                  </div>
+
+                  {metodoPago === 'efectivo' && (
+                    <div className="bg-[#050A06] p-4 rounded-xl border border-white/5 animate-in slide-in-from-top-2">
+                      <p className="text-[10px] uppercase text-white/50 tracking-widest mb-3 text-center">¿Con cuánto vas a pagar?</p>
+                      
+                      <div className="flex flex-wrap gap-2 justify-center mb-4">
+                        <button 
+                          onClick={() => setMontoPago(total.toString())} 
+                          className={`px-3 py-1.5 rounded-full text-[10px] font-bold uppercase transition-colors ${Number(montoPago) === total ? 'bg-[#CBA36A] text-black' : 'bg-white/10 text-white hover:bg-white/20'}`}
+                        >
+                          Exacto
+                        </button>
+                        {sugerenciasEfectivo.map(sug => (
+                           <button 
+                             key={sug} 
+                             onClick={() => setMontoPago(sug.toString())} 
+                             className={`px-3 py-1.5 rounded-full text-[10px] font-bold uppercase transition-colors ${Number(montoPago) === sug ? 'bg-[#CBA36A] text-black' : 'bg-white/10 text-white hover:bg-white/20'}`}
+                           >
+                             ${sug}
+                           </button>
+                        ))}
+                      </div>
+
+                      <div className="relative max-w-[200px] mx-auto">
+                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-white/40 font-bold">$</span>
+                        <input 
+                          type="number" 
+                          value={montoPago} 
+                          onChange={(e) => setMontoPago(e.target.value)} 
+                          className="w-full bg-black/50 border border-white/10 py-3 pl-8 pr-4 rounded-xl text-white text-center font-serif text-lg outline-none focus:border-[#CBA36A]" 
+                        />
+                      </div>
+
+                      {Number(montoPago) >= total && Number(montoPago) > total && (
+                        <p className="text-xs text-green-400 font-bold text-center mt-3 animate-in fade-in">
+                          Tu cambio será de: ${(Number(montoPago) - total).toFixed(2)}
+                        </p>
+                      )}
+                      
+                      {esPagoInvalido && (
+                        <p className="text-xs text-red-500 font-bold text-center mt-3 animate-in fade-in">
+                          ⚠️ El monto no cubre el total de la orden.
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  <button 
+                    onClick={enviarPedido} 
+                    disabled={enviando || !metodoPago || esPagoInvalido} 
+                    className="w-full bg-[#CBA36A] text-black py-5 rounded-2xl font-black text-[11px] uppercase tracking-widest mt-6 shadow-xl active:scale-95 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                  >
+                     {enviando ? 'Conectando con el Refugio...' : 'Confirmar Pedido'}
+                  </button>
                 </div>
               )}
             </div>
