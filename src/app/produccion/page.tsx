@@ -387,6 +387,7 @@ export default function ProduccionPage() {
                </div>
 
                {/* DIRECTORIO DE RECETAS GUARDADAS CON DESGLOSE DE INGREDIENTES */}
+               {/* DIRECTORIO DE RECETAS GUARDADAS CON DESGLOSE DE INGREDIENTES Y PASOS */}
                <section className="bg-[#0A130D] border border-white/10 rounded-[2.5rem] p-8 shadow-2xl">
                   <h3 className="text-xl font-serif text-white mb-6 flex items-center gap-2"><BookOpen size={20} className="text-[#CBA36A]"/> Base de Datos de Fórmulas Activas</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -424,6 +425,18 @@ export default function ProduccionPage() {
                                       ))}
                                    </ul>
                                 </div>
+
+                                {/* Desglose visual de instrucciones (NUEVO BLOQUE) */}
+                                {prod.instrucciones_receta && (
+                                   <div className="pt-3 border-t border-white/5">
+                                      <p className="text-[9px] text-white/30 font-black uppercase tracking-widest mb-2 flex items-center gap-1">
+                                         <ListOrdered size={10} /> Secuencia Operativa:
+                                      </p>
+                                      <p className="text-[10px] text-white/50 italic leading-relaxed max-h-24 overflow-y-auto custom-scrollbar pr-2 whitespace-pre-wrap">
+                                         {prod.instrucciones_receta}
+                                      </p>
+                                   </div>
+                                )}
                              </div>
                            )
                         })
