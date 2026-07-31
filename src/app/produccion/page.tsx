@@ -81,40 +81,75 @@ export default function ProduccionPage() {
 
 
   // --- ⚙️ LÓGICA FASE 1: ALMACÉN ---
+  // --- ⚙️ LÓGICA FASE 1: ALMACÉN (BLINDADO CON ZERO TRUST) ---
   const registrarInsumo = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!nombreInsumo || !cantidadEnvases || !tamanoEnvase || !costoTotalFactura) return;
     setGuardando(true);
+    
     try {
       const qEnvases = Number(cantidadEnvases);
       const qTamano = Number(tamanoEnvase);
       const cTotal = Number(costoTotalFactura);
 
+      // Ecuaciones matemáticas
       const costoPorEmpaque = cTotal / qEnvases; 
       const stockInicialTotal = qEnvases * qTamano;
 
-      const { error } = await supabase.from('insumos').insert([{
+      // Carga útil de datos (Payload)
+      const payloadInsumo = {
         nombre: nombreInsumo.trim(),
         unidad_medida: unidadBase,
         costo_paquete: costoPorEmpaque,
         cantidad_por_paquete: qTamano,
         stock_actual: stockInicialTotal
-      }]);
-      if (error) throw error;
+      };
 
+      // Transmisión al Multiplexor (API)
+      const res = await fetch('/api/admin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          action: 'crear_insumo', 
+          data: payloadInsumo 
+        })
+      });
+
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || 'Falla en el protocolo de servidor.');
+      }
+
+      // Limpieza de memoria
       setNombreInsumo(''); setCantidadEnvases(''); setTamanoEnvase(''); setCostoTotalFactura('');
       fetchDatosMaestros();
+
     } catch (error: any) {
-      alert(`Falla en almacenamiento: ${error.message}`);
-    } finally { setGuardando(false); }
+      alert(`Falla de transmisión: ${error.message}`);
+    } finally { 
+      setGuardando(false); 
+    }
   };
 
   const eliminarInsumo = async (id: string) => {
-    if(!confirm('¿Purgar insumo? Destruirá los cálculos de recetas enlazadas.')) return;
-    await supabase.from('insumos').delete().eq('id', id);
-    fetchDatosMaestros();
-  };
+    if(!confirm('¿Purgar insumo? Destruirá los cálculos de las recetas enlazadas.')) return;
+    
+    try {
+      const res = await fetch('/api/admin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          action: 'eliminar_insumo', 
+          data: { id } 
+        })
+      });
 
+      if (!res.ok) throw new Error('Acceso denegado por el servidor.');
+      fetchDatosMaestros();
+    } catch (error: any) {
+      alert(`Error al purgar matriz: ${error.message}`);
+    }
+  };
 
   // --- ⚙️ LÓGICA FASE 2: ENSAMBLADOR DE RECETAS ---
   const agregarIngrediente = () => {
