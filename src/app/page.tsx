@@ -5,7 +5,8 @@ import { supabase } from '@/lib/supabase';
 import { 
   ShoppingCart, Coffee, CupSoda, Snowflake, Croissant, 
   X, Check, Star, Trophy, Crown, Gift, Map as MapIcon, 
-  Shield, Compass, Bean, Handshake, AlertTriangle, Clock, Lock, Phone
+  Shield, Compass, Bean, Handshake, AlertTriangle, Clock, Lock, Phone,
+  Sparkles, ArrowRight
 } from 'lucide-react';
 
 export default function LandingPrincipal() {
@@ -28,11 +29,9 @@ export default function LandingPrincipal() {
 
   useEffect(() => {
     async function loadData() {
-      // 1. Consultar estado global de la tienda (Interruptor Maestro)
       const { data: config } = await supabase.from('configuracion_tienda').select('tienda_abierta').eq('id', 1).single();
       if (config) setTiendaAbierta(config.tienda_abierta);
 
-      // 2. Consulta optimizada mediante Vista SQL de ventas mensuales con Fallback
       let { data: topMensual } = await supabase.from('top_ventas_mensuales').select('*');
       if (!topMensual || topMensual.length === 0) {
         const { data: productosRespaldo } = await supabase.from('productos').select('*').limit(4);
@@ -40,11 +39,9 @@ export default function LandingPrincipal() {
       }
       setTopVentas(topMensual || []);
 
-      // 3. Cargar Promociones
       const { data: promociones } = await supabase.from('promociones').select('*').eq('activa', true).order('created_at', { ascending: false });
       setPromosActivas(promociones || []);
 
-      // 4. Hidratación de Sesión Segura
       try {
         const res = await fetch('/api/auth/me');
         if (res.ok) {
@@ -55,7 +52,6 @@ export default function LandingPrincipal() {
         console.error('Sesión no encontrada');
       }
 
-      // Cargar métricas del carrito visual
       const guardado = localStorage.getItem('sua_carrito');
       if (guardado) {
         const items = JSON.parse(guardado);
@@ -64,7 +60,6 @@ export default function LandingPrincipal() {
     }
     loadData();
     
-    // Escucha en tiempo real para cambios estructurales y del Semáforo Maestro
     const sub = supabase.channel('home_realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'productos' }, () => loadData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'promociones' }, () => loadData())
@@ -74,9 +69,8 @@ export default function LandingPrincipal() {
     return () => { supabase.removeChannel(sub); };
   }, []);
 
-  // --- ⏱️ ALGORITMO FILTRADO DE TIEMPO EFÍMERO ---
   const validarHorarioItem = (inicio: string | null, fin: string | null) => {
-    if (!inicio || !fin) return true; // Si no tiene horario asignado, está disponible siempre
+    if (!inicio || !fin) return true; 
     
     const ahora = new Date();
     const horas = String(ahora.getHours()).padStart(2, '0');
@@ -123,9 +117,7 @@ export default function LandingPrincipal() {
     setTimeout(() => setNotificacion({ visible: false, mensaje: '' }), 3000);
   };
 
-  // --- 🛒 FUNCIÓN POLIMÓRFICA CON ESCUDO DE CIERRE ---
   const inyectarAlCarrito = (item: any, tipo: 'promo' | 'producto') => {
-    // 🛡️ Interrupción de seguridad si el interruptor maestro está apagado
     if (!tiendaAbierta) {
       setNotificacion({ visible: true, mensaje: '🔴 Cocina Cerrada. No se pueden procesar órdenes.' });
       setTimeout(() => setNotificacion({ visible: false, mensaje: '' }), 4000);
@@ -192,6 +184,38 @@ export default function LandingPrincipal() {
 
   const rd = usuario ? getRangoData(usuario.visitas, usuario.rango) : null;
 
+  // --- MATEMÁTICAS DE LUDIFICACIÓN (HERO SECTION) ---
+  let progresoPorcentaje = 0;
+  let rangoSiguiente = null;
+  let beneficioActual = 'Acumula visitas para desbloquear beneficios VIP.';
+  let maxRango = 10;
+  let minRango = 0;
+
+  if (usuario) {
+     const v = usuario.visitas || 0;
+     if (v <= 10) { 
+         maxRango = 10; minRango = 0; rangoSiguiente = 'Conocedor'; 
+         beneficioActual = 'Acumula 11 visitas para tu primer Pase VIP.'; 
+     }
+     else if (v <= 20) { 
+         maxRango = 20; minRango = 11; rangoSiguiente = 'Cómplice'; 
+         beneficioActual = 'Pase VIP Activo: Leche vegetal o Extra Shot GRATIS.'; 
+     }
+     else if (v <= 35) { 
+         maxRango = 35; minRango = 21; rangoSiguiente = 'Familia Súa'; 
+         beneficioActual = 'Pase VIP Activo: Refill de Americano por $15 pesos.'; 
+     }
+     else { 
+         maxRango = v; minRango = 36; rangoSiguiente = 'Rango Máximo'; 
+         beneficioActual = 'Pase Supremo: 10% de descuento en TODAS tus cuentas.'; 
+         progresoPorcentaje = 100;
+     }
+
+     if (maxRango !== v && maxRango !== minRango && v < 36) {
+         progresoPorcentaje = ((v - minRango) / (maxRango - minRango + 1)) * 100;
+     }
+  }
+
   return (
     <main className="relative w-full min-h-screen bg-[#060B08] text-[#CBA36A] font-sans antialiased overflow-x-hidden selection:bg-[#CBA36A] selection:text-[#060B08]">
       
@@ -245,7 +269,7 @@ export default function LandingPrincipal() {
         </div>
       </header>
 
-      <div className="relative z-10 max-w-6xl mx-auto px-6 pt-48 pb-32">
+      <div className="relative z-10 max-w-6xl mx-auto px-6 pt-36 md:pt-48 pb-32">
         
         {/* Banner Operativo Global */}
         {!tiendaAbierta && (
@@ -256,19 +280,117 @@ export default function LandingPrincipal() {
           </div>
         )}
 
-        <div className="flex flex-col items-center mb-24 relative animate-in fade-in zoom-in duration-1000">
-          <div className="absolute -top-10 text-[9px] uppercase tracking-[0.4em] text-[#CBA36A]/60 font-bold">Bienvenido al Refugio</div>
-          <div className="w-44 h-44 md:w-56 md:h-56 rounded-full overflow-hidden border border-[#CBA36A]/40 shadow-[0_0_60px_rgba(203,163,106,0.3)] bg-[#101C13] mb-6">
-            <img src="/logo.jpeg" alt="Súa Logo" className="w-full h-full object-cover" />
-          </div>
-          
-          {/* 📍 RESTRICCIÓN LOGÍSTICA ACTUALIZADA */}
-          <div className="flex items-center gap-2 bg-[#050A06]/80 backdrop-blur-md border border-[#CBA36A]/30 px-5 py-2 rounded-full shadow-lg">
-            <MapIcon size={14} className="text-[#CBA36A]" />
-            <span className="text-[9px] md:text-[10px] uppercase font-black tracking-widest text-[#CBA36A]/80 text-center">
-              Servicio a Domicilio Exclusivo: Molinos y Tréboles
-            </span>
-          </div>
+        {/* ==========================================
+            MÓDULO DE LUDIFICACIÓN (HERO SECTION)
+            ========================================== */}
+        <div className="mb-24 mt-8 relative">
+          {!usuario ? (
+            // VISTA: INVITADO (Atracción y Conversión)
+            <div className="flex flex-col items-center text-center animate-in fade-in zoom-in duration-700">
+              <div className="w-32 h-32 md:w-40 md:h-40 rounded-full overflow-hidden border border-[#CBA36A]/40 shadow-[0_0_60px_rgba(203,163,106,0.3)] bg-[#101C13] mb-8 relative">
+                 <img src="/logo.jpeg" alt="Súa Logo" className="w-full h-full object-cover relative z-10" />
+                 <div className="absolute inset-0 bg-black/20 z-20"></div>
+              </div>
+              <h1 className="text-4xl md:text-6xl font-serif text-white mb-6 tracking-tight">
+                Tu travesía cafetalera <br className="hidden md:block" />
+                <span className="text-[#CBA36A] italic">comienza aquí.</span>
+              </h1>
+              <p className="text-white/60 max-w-2xl text-sm md:text-base leading-relaxed mb-10">
+                Súa no es solo café, es una ciencia de recompensas. Desbloquea niveles, obtén extracciones gratuitas, leches de especialidad y accede a beneficios de élite.
+              </p>
+              <div className="flex flex-col sm:flex-row items-center gap-4 w-full sm:w-auto">
+                <button 
+                  onClick={() => setMostrarModalLogin(true)}
+                  className="w-full sm:w-auto bg-[#CBA36A] text-[#0A130D] px-10 py-4 rounded-full font-black text-[11px] uppercase tracking-widest hover:bg-yellow-500 active:scale-95 transition-all shadow-[0_0_30px_rgba(203,163,106,0.3)] flex items-center justify-center gap-3"
+                >
+                  Unirse a la Aventura <ArrowRight size={16} />
+                </button>
+              </div>
+              {/* 📍 RESTRICCIÓN LOGÍSTICA */}
+              <div className="mt-12 flex items-center gap-2 bg-[#050A06]/80 backdrop-blur-md border border-[#CBA36A]/30 px-5 py-2 rounded-full shadow-lg">
+                <MapIcon size={14} className="text-[#CBA36A]" />
+                <span className="text-[9px] md:text-[10px] uppercase font-black tracking-widest text-[#CBA36A]/80 text-center">
+                  Servicio a Domicilio Exclusivo: Molinos y Tréboles
+                </span>
+              </div>
+            </div>
+          ) : (
+            // VISTA: USUARIO ÉLITE (Dashboard de Progreso)
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center animate-in fade-in slide-in-from-bottom-10 duration-700">
+              
+              {/* Panel de Bienvenida */}
+              <div className="lg:col-span-5 text-center lg:text-left flex flex-col items-center lg:items-start">
+                <div className="w-20 h-20 md:w-24 md:h-24 rounded-full overflow-hidden border border-[#CBA36A]/40 shadow-[0_0_40px_rgba(203,163,106,0.2)] bg-[#101C13] mb-6">
+                  <img src="/logo.jpeg" alt="Súa Logo" className="w-full h-full object-cover" />
+                </div>
+                <p className="text-[10px] font-black uppercase tracking-widest text-[#CBA36A] mb-2 flex items-center justify-center lg:justify-start gap-2">
+                  Rango Actual: {rd?.nombre}
+                </p>
+                <h1 className="text-3xl md:text-5xl font-serif text-white mb-4">
+                  Bienvenido de vuelta, <span className="text-[#CBA36A]">{usuario.nombre.split(' ')[0]}</span>.
+                </h1>
+                <p className="text-white/50 text-sm leading-relaxed mb-6 lg:max-w-md">
+                  Sistemas en línea. Tu perfil está sincronizado. Estás a punto de desbloquear la siguiente fase de beneficios en el refugio.
+                </p>
+                {/* 📍 RESTRICCIÓN LOGÍSTICA */}
+                <div className="flex items-center gap-2 bg-[#050A06]/80 backdrop-blur-md border border-[#CBA36A]/30 px-4 py-2 rounded-full shadow-lg">
+                  <MapIcon size={12} className="text-[#CBA36A]" />
+                  <span className="text-[9px] uppercase font-black tracking-widest text-[#CBA36A]/80 text-center">
+                    Cobertura: Molinos y Tréboles
+                  </span>
+                </div>
+              </div>
+
+              {/* Panel de Ingeniería de Recompensas */}
+              <div className="lg:col-span-7 bg-[#0A130D]/80 backdrop-blur-xl border border-white/10 p-6 md:p-10 rounded-[2.5rem] shadow-[0_20px_50px_rgba(0,0,0,0.6)] relative overflow-hidden group cursor-pointer" onClick={() => setMostrarModalClub(true)}>
+                 <div className="absolute right-0 top-0 w-32 h-full bg-gradient-to-l from-[#CBA36A]/5 to-transparent pointer-events-none group-hover:from-[#CBA36A]/10 transition-colors"></div>
+
+                 <div className="flex flex-col md:flex-row gap-8 items-start md:items-center">
+                    {/* Medalla Holográfica Dinámica */}
+                    <div className="shrink-0 relative mx-auto md:mx-0">
+                       <div className={`absolute inset-0 blur-2xl opacity-20 rounded-full animate-pulse bg-gradient-to-tr ${rd?.glow}`}></div>
+                       <div className={`bg-[#101C13] border border-white/10 w-28 h-28 rounded-full flex items-center justify-center relative z-10 shadow-inner ${rd?.color}`}>
+                          {rd?.icon && <rd.icon.type size={48} />}
+                       </div>
+                    </div>
+
+                    {/* Matemáticas de Progresión */}
+                    <div className="flex-1 w-full relative z-10">
+                       <div className="flex justify-between items-end mb-4">
+                          <div>
+                             <p className="text-[10px] font-black uppercase tracking-widest text-white/40 mb-1">Visitas Logradas</p>
+                             <p className="text-4xl font-serif text-white">{usuario.visitas} <span className="text-base text-white/30 font-sans">/ {maxRango}</span></p>
+                          </div>
+                          {usuario.visitas < 36 && (
+                             <div className="text-right">
+                                <p className="text-[10px] font-black uppercase tracking-widest text-[#CBA36A] mb-1">Siguiente Rango</p>
+                                <p className="text-sm font-bold text-white">{rangoSiguiente}</p>
+                             </div>
+                          )}
+                       </div>
+
+                       {/* Barra de Progreso */}
+                       <div className="h-2.5 w-full bg-black/60 rounded-full overflow-hidden border border-white/10 relative mb-5 shadow-inner">
+                          <div 
+                            className={`h-full bg-gradient-to-r ${rd?.glow} transition-all duration-1000 ease-out`}
+                            style={{ width: `${progresoPorcentaje}%` }}
+                          ></div>
+                       </div>
+
+                       {/* Beneficio Activo */}
+                       <div className={`border p-4 rounded-2xl flex items-center gap-3 ${rd?.bg} ${rd?.border}`}>
+                          <Sparkles size={18} className={rd?.color} />
+                          <div>
+                             <p className={`text-[9px] font-black uppercase tracking-widest ${rd?.color}`}>Status del Beneficio</p>
+                             <p className="text-xs font-medium text-white/90 mt-0.5">{beneficioActual}</p>
+                          </div>
+                       </div>
+                    </div>
+                 </div>
+              </div>
+
+            </div>
+          )}
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-12 mb-32">
