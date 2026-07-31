@@ -14,6 +14,7 @@ export default function ProduccionPage() {
   // --- ESTADOS GLOBALES ---
   const [insumos, setInsumos] = useState<any[]>([]);
   const [productos, setProductos] = useState<any[]>([]);
+  const [recetasGlobales, setRecetasGlobales] = useState<any[]>([]); // Memoria caché de fórmulas
   const [cargando, setCargando] = useState(true);
   const [guardando, setGuardando] = useState(false);
 
@@ -35,46 +36,44 @@ export default function ProduccionPage() {
     fetchDatosMaestros();
   }, []);
 
-  // 📡 CARGA DE MATRIZ DE DATOS (Solo Lectura vía Supabase)
+  // 📡 CARGA DE MATRIZ DE DATOS (Optimizada para evitar N+1 queries)
   async function fetchDatosMaestros() {
     setCargando(true);
-    const [resInsumos, resProductos] = await Promise.all([
+    const [resInsumos, resProductos, resRecetas] = await Promise.all([
       supabase.from('insumos').select('*').order('nombre', { ascending: true }),
-      supabase.from('productos').select('*').order('categoria', { ascending: true })
+      supabase.from('productos').select('*').order('categoria', { ascending: true }),
+      supabase.from('recetas').select('producto_id, cantidad_necesaria, insumos(*)') // Cruce relacional
     ]);
+    
     setInsumos(resInsumos.data || []);
     setProductos(resProductos.data || []);
+    setRecetasGlobales(resRecetas.data || []);
     setCargando(false);
   }
 
-  // 🔄 CARGA DE RECETA EXISTENTE AL SELECCIONAR PRODUCTO
+  // 🔄 CARGA INSTANTÁNEA DE RECETA DESDE MEMORIA CACHÉ
   useEffect(() => {
-    async function cargarRecetaExistente() {
-      if (!productoSeleccionado) {
-        setInstrucciones('');
-        setIngredientes([]);
-        return;
-      }
-      
-      const prod = productos.find(p => p.id === productoSeleccionado);
-      setInstrucciones(prod?.instrucciones_receta || '');
-
-      const { data: recetaDB } = await supabase
-        .from('recetas')
-        .select(`cantidad_necesaria, insumos (*)`)
-        .eq('producto_id', productoSeleccionado);
-
-      if (recetaDB && recetaDB.length > 0) {
-        setIngredientes(recetaDB.map(r => ({
-          insumo: r.insumos,
-          cantidad: r.cantidad_necesaria
-        })));
-      } else {
-        setIngredientes([]);
-      }
+    if (!productoSeleccionado) {
+      setInstrucciones('');
+      setIngredientes([]);
+      return;
     }
-    cargarRecetaExistente();
-  }, [productoSeleccionado, productos]);
+    
+    const prod = productos.find(p => p.id === productoSeleccionado);
+    setInstrucciones(prod?.instrucciones_receta || '');
+
+    // Filtramos desde la matriz descargada en lugar de hacer otra petición a la base de datos
+    const recetaActual = recetasGlobales.filter(r => r.producto_id === productoSeleccionado);
+    
+    if (recetaActual.length > 0) {
+      setIngredientes(recetaActual.map(r => ({
+        insumo: r.insumos,
+        cantidad: r.cantidad_necesaria
+      })));
+    } else {
+      setIngredientes([]);
+    }
+  }, [productoSeleccionado, productos, recetasGlobales]);
 
   // --- ⚙️ LÓGICA FASE 1: ALMACÉN (Zero Trust API) ---
   const registrarInsumo = async (e: React.FormEvent) => {
@@ -183,13 +182,16 @@ export default function ProduccionPage() {
       }
 
       alert("Fórmula guardada exitosamente bajo protocolo blindado.");
-      fetchDatosMaestros(); 
+      fetchDatosMaestros(); // Recarga la matriz global para actualizar las tarjetas inferiores
     } catch (error: any) {
       alert(`Error en compilación: ${error.message}`);
     } finally {
       setGuardando(false);
     }
   };
+
+  // Generador de matriz de productos filtrados (Solo los que tienen receta real en la base de datos)
+  const productosConReceta = productos.filter(p => recetasGlobales.some(r => r.producto_id === p.id));
 
   return (
     <LockScreen titulo="ERP Producción Súa">
@@ -384,29 +386,47 @@ export default function ProduccionPage() {
                   </section>
                </div>
 
-               {/* DIRECTORIO DE RECETAS GUARDADAS (Inferior) */}
+               {/* DIRECTORIO DE RECETAS GUARDADAS CON DESGLOSE DE INGREDIENTES */}
                <section className="bg-[#0A130D] border border-white/10 rounded-[2.5rem] p-8 shadow-2xl">
                   <h3 className="text-xl font-serif text-white mb-6 flex items-center gap-2"><BookOpen size={20} className="text-[#CBA36A]"/> Base de Datos de Fórmulas Activas</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                     {productos.filter(p => Number(p.costo_produccion) > 0 || p.instrucciones_receta).length === 0 ? (
-                        <p className="text-white/40 text-sm italic col-span-full">No hay recetas estructuradas en el sistema aún.</p>
+                     {productosConReceta.length === 0 ? (
+                        <p className="text-white/40 text-sm italic col-span-full">Aún no hay recetas estructuradas en el sistema maestro.</p>
                      ) : (
-                        productos.filter(p => Number(p.costo_produccion) > 0 || p.instrucciones_receta).map(prod => (
-                           <div 
-                             key={prod.id} 
-                             onClick={() => setProductoSeleccionado(prod.id)} 
-                             className="bg-[#101C13] p-5 rounded-2xl border border-white/5 hover:border-[#CBA36A]/50 hover:bg-[#CBA36A]/5 cursor-pointer transition-all group flex justify-between items-center"
-                           >
-                              <div>
-                                 <p className="text-sm font-bold text-white group-hover:text-[#CBA36A] transition-colors">{prod.nombre}</p>
-                                 <p className="text-[10px] text-white/40 uppercase tracking-widest mt-1">{prod.categoria}</p>
-                              </div>
-                              <div className="text-right">
-                                 <p className="text-[9px] text-[#CBA36A]/60 font-black uppercase tracking-widest mb-0.5">Costo</p>
-                                 <p className="text-sm font-serif text-white/80">${Number(prod.costo_produccion).toFixed(2)}</p>
-                              </div>
-                           </div>
-                        ))
+                        productosConReceta.map(prod => {
+                           const ingredientesDeEsteProducto = recetasGlobales.filter(r => r.producto_id === prod.id);
+                           return (
+                             <div 
+                               key={prod.id} 
+                               onClick={() => setProductoSeleccionado(prod.id)} 
+                               className="bg-[#101C13] p-5 rounded-2xl border border-white/5 hover:border-[#CBA36A]/50 hover:bg-[#CBA36A]/5 cursor-pointer transition-all group flex flex-col gap-4"
+                             >
+                                <div className="flex justify-between items-start">
+                                   <div>
+                                      <p className="text-sm font-bold text-white group-hover:text-[#CBA36A] transition-colors">{prod.nombre}</p>
+                                      <p className="text-[10px] text-white/40 uppercase tracking-widest mt-1">{prod.categoria}</p>
+                                   </div>
+                                   <div className="text-right">
+                                      <p className="text-[9px] text-[#CBA36A]/60 font-black uppercase tracking-widest mb-0.5">Costo</p>
+                                      <p className="text-sm font-serif text-white/80">${Number(prod.costo_produccion).toFixed(2)}</p>
+                                   </div>
+                                </div>
+                                
+                                {/* Desglose visual de insumos */}
+                                <div className="pt-3 border-t border-white/5">
+                                   <p className="text-[9px] text-white/30 font-black uppercase tracking-widest mb-2">Fórmula Analítica:</p>
+                                   <ul className="space-y-1">
+                                      {ingredientesDeEsteProducto.map((ing, idx) => (
+                                         <li key={idx} className="text-[10px] text-white/60 flex justify-between">
+                                            <span className="truncate pr-2">{ing.insumos?.nombre}</span>
+                                            <span className="text-[#CBA36A] whitespace-nowrap">{ing.cantidad_necesaria} {ing.insumos?.unidad_medida}</span>
+                                         </li>
+                                      ))}
+                                   </ul>
+                                </div>
+                             </div>
+                           )
+                        })
                      )}
                   </div>
                </section>
@@ -415,7 +435,7 @@ export default function ProduccionPage() {
           )}
 
           {/* =========================================
-              MÓDULO 3: INTELIGENCIA DE COSTOS
+              MÓDULO 3: INTELIGENCIA DE COSTOS (CORREGIDO precio_venta)
           ========================================= */}
           {pestanaActiva === 'costos' && (
              <div className="space-y-8 animate-in fade-in duration-500">
@@ -434,7 +454,8 @@ export default function ProduccionPage() {
                       </div>
                    ) : (
                      productos.filter(p => Number(p.costo_produccion) > 0).map(prod => {
-                       const precioVenta = Number(prod.precio) || 0; 
+                       // CORRECCIÓN APLICADA: Ahora lee la columna exacta 'precio_venta'
+                       const precioVenta = Number(prod.precio_venta) || 0; 
                        const costoProduccion = Number(prod.costo_produccion);
                        const utilidadNeta = precioVenta - costoProduccion;
                        const margen = precioVenta > 0 ? (utilidadNeta / precioVenta) * 100 : 0;
