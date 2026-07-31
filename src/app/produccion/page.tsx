@@ -185,30 +185,34 @@ export default function ProduccionPage() {
     setGuardando(true);
 
     try {
-      // 1. Purgar la receta anterior (Limpieza de matriz)
-      await supabase.from('recetas').delete().eq('producto_id', productoSeleccionado);
+      // 1. Formateamos los ingredientes para transmisión
+      const ingredientesPayload = ingredientes.map(ing => ({
+        insumo_id: ing.insumo.id,
+        cantidad: ing.cantidad
+      }));
 
-      // 2. Inyectar la nueva fórmula si hay ingredientes
-      if (ingredientes.length > 0) {
-        const payloadReceta = ingredientes.map(ing => ({
-          producto_id: productoSeleccionado,
-          insumo_id: ing.insumo.id,
-          cantidad_necesaria: ing.cantidad
-        }));
-        const { error: errReceta } = await supabase.from('recetas').insert(payloadReceta);
-        if (errReceta) throw errReceta;
+      // 2. Transmisión al Multiplexor (API Segura)
+      const res = await fetch('/api/admin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'guardar_receta',
+          data: {
+            producto_id: productoSeleccionado,
+            ingredientes: ingredientesPayload,
+            instrucciones: instrucciones,
+            costo_total: costoTotalEnVivo
+          }
+        })
+      });
+
+      if (!res.ok) {
+         const errData = await res.json();
+         throw new Error(errData.error || 'Rechazo en el puente de servidor.');
       }
 
-      // 3. Actualizar Producto (Instrucciones y Costo de Producción exacto)
-      const { error: errProd } = await supabase.from('productos').update({
-        instrucciones_receta: instrucciones,
-        costo_produccion: costoTotalEnVivo
-      }).eq('id', productoSeleccionado);
-      
-      if (errProd) throw errProd;
-
-      alert("Fórmula guardada exitosamente en el servidor.");
-      fetchDatosMaestros(); // Refrescar datos
+      alert("Fórmula guardada exitosamente bajo protocolo blindado.");
+      fetchDatosMaestros(); // Recalibrar la interfaz
     } catch (error: any) {
       alert(`Error en la compilación de la receta: ${error.message}`);
     } finally {
