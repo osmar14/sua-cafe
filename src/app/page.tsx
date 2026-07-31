@@ -234,16 +234,16 @@ export default function LandingPrincipal() {
         
         <div className="flex items-center gap-3 md:gap-8">
           {usuario && rd ? (
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-3 md:gap-4">
+              {/* CÁPSULA MINIMALISTA DE USUARIO */}
               <button onClick={() => setMostrarModalClub(true)} className="relative group cursor-pointer active:scale-95 transition-all text-left">
-                <div className={`absolute -inset-1 rounded-full blur-md opacity-20 group-hover:opacity-60 transition duration-500 bg-gradient-to-r ${rd.glow}`}></div>
-                <div className={`relative flex items-center gap-3 bg-[#0A130D]/90 border ${rd.border}/30 pl-4 pr-1 py-1 rounded-full shadow-2xl`}>
-                  <div className="flex flex-col items-end">
-                    <span className="text-base md:text-2xl font-serif font-bold text-white leading-none capitalize">{usuario.nombre}</span>
-                    <div className={`flex items-center gap-1 mt-1 px-2 py-0.5 rounded-sm ${rd.bg}`}>{rd.icon}<span className={`text-[9px] md:text-[11px] font-black uppercase tracking-widest ${rd.color}`}>{rd.nombre}</span></div>
-                  </div>
-                  <div className={`w-10 h-10 md:w-14 md:h-14 rounded-full flex items-center justify-center border-4 border-[#0A130D] shadow-inner text-[#0A130D] bg-gradient-to-br ${rd.glow}`}>
-                    <span className="font-serif font-black text-xl md:text-3xl">{usuario.nombre.charAt(0).toUpperCase()}</span>
+                <div className={`absolute -inset-1 rounded-full blur-sm opacity-20 group-hover:opacity-50 transition duration-500 bg-gradient-to-r ${rd.glow}`}></div>
+                <div className="relative flex items-center gap-2 bg-[#0A130D]/90 border border-white/10 pl-3 pr-1 py-1 rounded-full shadow-lg">
+                  <span className="text-sm md:text-base font-serif font-bold text-white/90 capitalize pl-1">
+                    {usuario.nombre.split(' ')[0]} {/* Muestra solo el primer nombre para mayor limpieza */}
+                  </span>
+                  <div className={`w-8 h-8 md:w-10 md:h-10 rounded-full flex items-center justify-center border-2 border-[#0A130D] shadow-inner text-[#0A130D] bg-gradient-to-br ${rd.glow}`}>
+                    <span className="font-serif font-black text-sm md:text-lg">{usuario.nombre.charAt(0).toUpperCase()}</span>
                   </div>
                 </div>
               </button>
@@ -296,7 +296,7 @@ export default function LandingPrincipal() {
                 <span className="text-[#CBA36A] italic">comienza aquí.</span>
               </h1>
               <p className="text-white/60 max-w-2xl text-sm md:text-base leading-relaxed mb-10">
-                Súa no es solo café, es una ciencia de recompensas. Desbloquea niveles, obtén extracciones gratuitas, leches de especialidad y accede a beneficios de élite.
+                Súa café,con visitas . Desbloquea niveles, obtén extracciones gratuitas, leches de especialidad y accede a beneficios de élite.
               </p>
               <div className="flex flex-col sm:flex-row items-center gap-4 w-full sm:w-auto">
                 <button 
