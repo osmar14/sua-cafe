@@ -233,30 +233,6 @@ export default function LandingPrincipal() {
         <span className="text-2xl md:text-4xl font-serif font-bold text-[#CBA36A] drop-shadow-md tracking-widest">SÚA</span>
         
         <div className="flex items-center gap-3 md:gap-8">
-          {usuario && rd ? (
-            <div className="flex items-center gap-3 md:gap-4">
-              {/* CÁPSULA MINIMALISTA DE USUARIO */}
-              <button onClick={() => setMostrarModalClub(true)} className="relative group cursor-pointer active:scale-95 transition-all text-left">
-                <div className={`absolute -inset-1 rounded-full blur-sm opacity-20 group-hover:opacity-50 transition duration-500 bg-gradient-to-r ${rd.glow}`}></div>
-                <div className="relative flex items-center gap-2 bg-[#0A130D]/90 border border-white/10 pl-3 pr-1 py-1 rounded-full shadow-lg">
-                  <span className="text-sm md:text-base font-serif font-bold text-white/90 capitalize pl-1">
-                    {usuario.nombre.split(' ')[0]} {/* Muestra solo el primer nombre para mayor limpieza */}
-                  </span>
-                  <div className={`w-8 h-8 md:w-10 md:h-10 rounded-full flex items-center justify-center border-2 border-[#0A130D] shadow-inner text-[#0A130D] bg-gradient-to-br ${rd.glow}`}>
-                    <span className="font-serif font-black text-sm md:text-lg">{usuario.nombre.charAt(0).toUpperCase()}</span>
-                  </div>
-                </div>
-              </button>
-              <button onClick={cerrarSesion} className="text-white/40 hover:text-white transition-colors" title="Cerrar Sesión">
-                <X size={20} />
-              </button>
-            </div>
-          ) : (
-            <button onClick={() => setMostrarModalLogin(true)} className="relative px-4 py-2 bg-white/5 border border-[#CBA36A]/30 rounded-full text-[10px] font-black uppercase tracking-widest text-[#CBA36A] hover:bg-[#CBA36A]/10 transition-colors flex items-center gap-2">
-              <Lock size={14} /> Entrar al Refugio
-            </button>
-          )}
-
           <Link href="/carrito" className="relative bg-[#CBA36A] p-3 md:px-6 md:py-3 rounded-full text-[#060B08] active:scale-90 transition-all shadow-xl flex items-center gap-2 hover:bg-yellow-500">
             <ShoppingCart size={20} /> 
             {cantidadCarrito > 0 && (
@@ -296,7 +272,7 @@ export default function LandingPrincipal() {
                 <span className="text-[#CBA36A] italic">comienza aquí.</span>
               </h1>
               <p className="text-white/60 max-w-2xl text-sm md:text-base leading-relaxed mb-10">
-                Súa café,con visitas . Desbloquea niveles, obtén extracciones gratuitas, leches de especialidad y accede a beneficios de élite.
+                Súa no es solo café, es una ciencia de recompensas. Desbloquea niveles, obtén extracciones gratuitas, leches de especialidad y accede a beneficios de élite.
               </p>
               <div className="flex flex-col sm:flex-row items-center gap-4 w-full sm:w-auto">
                 <button 
@@ -332,12 +308,18 @@ export default function LandingPrincipal() {
                 <p className="text-white/50 text-sm leading-relaxed mb-6 lg:max-w-md">
                   Sistemas en línea. Tu perfil está sincronizado. Estás a punto de desbloquear la siguiente fase de beneficios en el refugio.
                 </p>
-                {/* 📍 RESTRICCIÓN LOGÍSTICA */}
-                <div className="flex items-center gap-2 bg-[#050A06]/80 backdrop-blur-md border border-[#CBA36A]/30 px-4 py-2 rounded-full shadow-lg">
-                  <MapIcon size={12} className="text-[#CBA36A]" />
-                  <span className="text-[9px] uppercase font-black tracking-widest text-[#CBA36A]/80 text-center">
-                    Cobertura: Molinos y Tréboles
-                  </span>
+                
+                {/* 📍 RESTRICCIÓN LOGÍSTICA & BOTÓN CERRAR SESIÓN */}
+                <div className="flex flex-col lg:flex-row items-center gap-4">
+                  <div className="flex items-center gap-2 bg-[#050A06]/80 backdrop-blur-md border border-[#CBA36A]/30 px-4 py-2 rounded-full shadow-lg">
+                    <MapIcon size={12} className="text-[#CBA36A]" />
+                    <span className="text-[9px] uppercase font-black tracking-widest text-[#CBA36A]/80 text-center">
+                      Cobertura: Molinos y Tréboles
+                    </span>
+                  </div>
+                  <button onClick={cerrarSesion} className="text-[9px] uppercase tracking-widest text-white/40 hover:text-white transition-colors flex items-center gap-1 border border-transparent hover:border-white/10 px-3 py-1.5 rounded-full">
+                    <X size={12} /> Salir
+                  </button>
                 </div>
               </div>
 
