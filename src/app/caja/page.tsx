@@ -4,7 +4,8 @@ import { supabase } from '@/lib/supabase';
 import LockScreen from '@/components/LockScreen';
 import { 
   BadgeDollarSign, CheckCircle, Clock, 
-  User, Phone, ShoppingBag, Loader2, AlertCircle 
+  User, Phone, ShoppingBag, Loader2, AlertCircle,
+  CreditCard, Banknote
 } from 'lucide-react';
 
 export default function CajaPage() {
@@ -119,16 +120,42 @@ export default function CajaPage() {
                     </div>
                   </div>
 
-                  <div className="w-full md:w-48 space-y-4 text-center border-t md:border-t-0 md:border-l border-white/10 pt-6 md:pt-0 md:pl-8">
-                    <p className="text-[10px] font-black uppercase text-white/40 tracking-[0.2em]">Total a Cobrar</p>
-                    <p className="text-5xl font-serif text-white leading-none">${p.total}</p>
+                  <div className="w-full md:w-56 space-y-4 flex flex-col border-t md:border-t-0 md:border-l border-white/10 pt-6 md:pt-0 md:pl-8">
+                    <div className="text-center">
+                       <p className="text-[10px] font-black uppercase text-white/40 tracking-[0.2em]">Total a Cobrar</p>
+                       <p className="text-5xl font-serif text-white leading-none">${p.total}</p>
+                    </div>
+
+                    {/* --- MÓDULO DE INSTRUCCIÓN DE PAGO (KAIZEN) --- */}
+                    {p.metodo_pago === 'tarjeta' && (
+                       <div className="bg-blue-900/20 border border-blue-500/30 p-3 rounded-xl flex flex-col items-center justify-center gap-1 shadow-inner">
+                          <CreditCard size={18} className="text-blue-400" />
+                          <p className="text-[9px] font-black text-blue-400 uppercase tracking-widest text-center">Cobrar con Terminal</p>
+                       </div>
+                    )}
+
+                    {p.metodo_pago === 'efectivo' && (
+                       <div className="bg-green-900/20 border border-green-500/30 p-4 rounded-xl flex flex-col gap-2 shadow-inner">
+                          <p className="text-[10px] font-black text-green-400 uppercase tracking-widest flex items-center justify-center gap-2 border-b border-green-500/20 pb-2">
+                             <Banknote size={14} /> Pago en Efectivo
+                          </p>
+                          <div className="flex justify-between text-xs text-white/80 font-serif">
+                            <span>Recibes:</span>
+                            <span>${Number(p.monto_efectivo).toFixed(2)}</span>
+                          </div>
+                          <div className="flex justify-between text-sm text-green-400 font-bold font-serif bg-green-500/10 p-1.5 rounded">
+                            <span>Cambio:</span>
+                            <span>${(Number(p.monto_efectivo) - Number(p.total)).toFixed(2)}</span>
+                          </div>
+                       </div>
+                    )}
                     
                     <button 
                       onClick={() => cobrarPedido(p)}
                       disabled={procesando === p.id}
-                      className="w-full bg-[#CBA36A] text-black py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl active:scale-95 transition-all flex justify-center items-center gap-2"
+                      className="w-full bg-[#CBA36A] text-black py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl active:scale-95 transition-all flex justify-center items-center gap-2 mt-auto"
                     >
-                      {procesando === p.id ? <Loader2 size={16} className="animate-spin"/> : <><CheckCircle size={14}/> Cobrar Pedido</>}
+                      {procesando === p.id ? <Loader2 size={16} className="animate-spin"/> : <><CheckCircle size={14}/> Finalizar Orden</>}
                     </button>
                     
                     <div className="flex items-center justify-center gap-1 text-[8px] font-black text-[#CBA36A] uppercase animate-pulse">

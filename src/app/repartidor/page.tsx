@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { MapPin, Package, Lock, CheckCircle, Navigation, Loader2 } from 'lucide-react';
+import { MapPin, Package, Lock, CheckCircle, Navigation, Loader2, CreditCard, Banknote } from 'lucide-react';
 
 export default function DeliveryDashboard() {
   const [autorizado, setAutorizado] = useState(false);
@@ -38,7 +38,6 @@ export default function DeliveryDashboard() {
   }, [autorizado]);
 
   async function fetchPedidos() {
-    // 🛠️ CORRECCIÓN: Escaneamos pedidos 'preparados' por la cocina
     const { data } = await supabase
       .from('pedidos')
       .select('*')
@@ -80,7 +79,7 @@ export default function DeliveryDashboard() {
     setProcesandoId(id_pedido);
     try {
       const res = await fetch('/api/delivery/entregar', {
-        method: 'PATCH', // 🛠️ CORRECCIÓN: Ajustado a PATCH
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id_pedido })
       });
@@ -170,7 +169,7 @@ export default function DeliveryDashboard() {
                 <span className="text-xl font-serif text-[#CBA36A]">${pedido.total}</span>
               </div>
 
-              <div className="bg-black/30 rounded-xl p-4 mb-5 border border-white/5">
+              <div className="bg-black/30 rounded-xl p-4 mb-4 border border-white/5">
                 <div className="flex items-start gap-3">
                   <MapPin className="text-red-500 shrink-0 mt-0.5" size={18} />
                   <div>
@@ -184,6 +183,30 @@ export default function DeliveryDashboard() {
                   </div>
                 </div>
               </div>
+
+              {/* --- MÓDULO DE INSTRUCCIÓN DE PAGO (KAIZEN) --- */}
+              {pedido.metodo_pago === 'tarjeta' && (
+                 <div className="bg-blue-900/20 border border-blue-500/30 p-3 rounded-xl flex flex-col items-center justify-center gap-1 shadow-inner mb-5">
+                    <CreditCard size={18} className="text-blue-400" />
+                    <p className="text-[9px] font-black text-blue-400 uppercase tracking-widest text-center">💳 Llevar Terminal Bancaria</p>
+                 </div>
+              )}
+
+              {pedido.metodo_pago === 'efectivo' && (
+                 <div className="bg-green-900/20 border border-green-500/30 p-4 rounded-xl flex flex-col gap-2 shadow-inner mb-5">
+                    <p className="text-[10px] font-black text-green-400 uppercase tracking-widest flex items-center gap-2 border-b border-green-500/20 pb-2">
+                       <Banknote size={14} /> Cobro en Efectivo
+                    </p>
+                    <div className="flex justify-between text-xs text-white/80 font-serif">
+                      <span>El cliente paga con:</span>
+                      <span>${Number(pedido.monto_efectivo).toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between text-sm text-green-400 font-bold font-serif bg-green-500/10 p-1.5 rounded">
+                      <span>Llevar cambio exacto:</span>
+                      <span>${(Number(pedido.monto_efectivo) - Number(pedido.total)).toFixed(2)}</span>
+                    </div>
+                 </div>
+              )}
 
               <button 
                 onClick={() => marcarComoEntregado(pedido.id)}
