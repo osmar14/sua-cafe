@@ -30,7 +30,6 @@ function MenuContent() {
   const [notificacion, setNotificacion] = useState<{ visible: boolean, mensaje: string }>({ visible: false, mensaje: '' });
 
   useEffect(() => {
-    // Cargar carrito guardado
     const guardado = localStorage.getItem('sua_carrito');
     if (guardado) setCarrito(JSON.parse(guardado));
   }, []);
@@ -41,11 +40,9 @@ function MenuContent() {
 
   useEffect(() => {
     async function fetchData() {
-      // 1. Consultar estado global de la tienda (Interruptor Maestro)
       const { data: config } = await supabase.from('configuracion_tienda').select('tienda_abierta').eq('id', 1).single();
       if (config) setTiendaAbierta(config.tienda_abierta);
 
-      // 2. Cargar Menú (El select('*') ya trae la columna 'disponible')
       let peticion = supabase.from('productos').select('*');
       
       if (categoria === 'caliente') peticion = peticion.ilike('categoria', '%alient%');
@@ -58,7 +55,6 @@ function MenuContent() {
     }
     fetchData();
     
-    // Escucha dual: Filtros de menú y Semáforo de Tienda
     const sub = supabase.channel(`menu_${categoria}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'productos' }, () => fetchData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'configuracion_tienda' }, () => fetchData())
@@ -87,11 +83,45 @@ function MenuContent() {
     setTimeout(() => setNotificacion({ visible: false, mensaje: '' }), 3000);
   };
 
+  // --- 🧠 FUNCIÓN UNIFICADA: FUSIONA PRODUCTOS IDÉNTICOS EN EL CARRITO ---
+  const agregarOFusionarEnCarrito = (productoBase: any, extrasStr: string, precioUnitario: number) => {
+    const indiceExistente = carrito.findIndex(
+      (item) => item.id === productoBase.id && (item.extras_str || '') === extrasStr
+    );
+
+    let nuevoCarrito;
+    if (indiceExistente !== -1) {
+      nuevoCarrito = carrito.map((item, idx) => {
+        if (idx !== indiceExistente) return item;
+        const nuevaCantidad = (Number(item.cantidad) || 1) + 1;
+        return {
+          ...item,
+          cantidad: nuevaCantidad,
+          precio_unitario: precioUnitario,
+          precio_final: precioUnitario * nuevaCantidad,
+        };
+      });
+    } else {
+      const productoFinal = {
+        ...productoBase,
+        id_carrito: Math.random().toString(36).substr(2, 9),
+        cantidad: 1,
+        precio_unitario: precioUnitario,
+        precio_final: precioUnitario,
+        extras_str: extrasStr,
+      };
+      nuevoCarrito = [...carrito, productoFinal];
+    }
+
+    setCarrito(nuevoCarrito);
+    localStorage.setItem('sua_carrito', JSON.stringify(nuevoCarrito));
+  };
+
   const confirmarAgregarAlCarrito = () => {
     if (!itemSeleccionado) return;
 
     let costoExtras = 0;
-    let extrasNombres = [];
+    const extrasNombres: string[] = [];
 
     if (extraDeslactosada) { costoExtras += 10; extrasNombres.push("Deslactosada"); }
     if (extraShot) { costoExtras += 10; extrasNombres.push("Doble Shot"); }
@@ -102,16 +132,10 @@ function MenuContent() {
       extrasNombres.push(esFrappe ? "Crema Batida (Gratis)" : "Crema Batida");
     }
 
-    const productoFinal = {
-      ...itemSeleccionado,
-      id_carrito: Math.random().toString(36).substr(2, 9),
-      precio_final: Number(itemSeleccionado.precio_venta) + costoExtras,
-      extras_str: extrasNombres.join(", ")
-    };
+    const extrasStr = extrasNombres.join(", ");
+    const precioUnitario = Number(itemSeleccionado.precio_venta) + costoExtras;
 
-    const nuevoCarrito = [...carrito, productoFinal];
-    setCarrito(nuevoCarrito);
-    localStorage.setItem('sua_carrito', JSON.stringify(nuevoCarrito));
+    agregarOFusionarEnCarrito(itemSeleccionado, extrasStr, precioUnitario);
     
     setItemSeleccionado(null);
     setExtraDeslactosada(false); setExtraShot(false); setExtraCrema(false);
@@ -119,7 +143,7 @@ function MenuContent() {
     mostrarNotificacion(`👍 ${itemSeleccionado.nombre} agregado a tu cuenta`);
   };
 
-  // 🛡️ ESCUDO DE INTERCEPCIÓN EN EL MODAL (Doble validación de seguridad)
+  // 🛡️ ESCUDO DE INTERCEPCIÓN EN EL MODAL
   const abrirModal = (producto: any) => {
     if (!tiendaAbierta) {
       mostrarNotificacion('🔴 Cocina Cerrada. No se pueden procesar órdenes.');
@@ -137,15 +161,15 @@ function MenuContent() {
     }
 
     if (producto.categoria.toLowerCase().includes('pan')) {
-      const productoFinal = { ...producto, id_carrito: Math.random().toString(36).substr(2, 9), precio_final: Number(producto.precio_venta), extras_str: "" };
-      const nuevoCarrito = [...carrito, productoFinal];
-      setCarrito(nuevoCarrito);
-      localStorage.setItem('sua_carrito', JSON.stringify(nuevoCarrito));
+      agregarOFusionarEnCarrito(producto, "", Number(producto.precio_venta));
       mostrarNotificacion(`👍 ${producto.nombre} agregado a tu cuenta`);
     } else {
       setItemSeleccionado(producto);
     }
   };
+
+  // Contador real de artículos sumando las cantidades fusionadas
+  const totalArticulosCarrito = carrito.reduce((acc, i) => acc + (Number(i.cantidad) || 1), 0);
 
   const esFrappe = itemSeleccionado?.categoria?.toLowerCase().includes('frap');
   const costoTotalModal = itemSeleccionado ? 
@@ -165,9 +189,9 @@ function MenuContent() {
         
         <Link href="/carrito" className="relative bg-[#CBA36A] p-3 md:px-6 md:py-3 rounded-full text-[#060B08] active:scale-90 transition-all shadow-xl flex items-center gap-2 hover:bg-yellow-500">
           <ShoppingCart size={20} />
-          {carrito.length > 0 && (
+          {totalArticulosCarrito > 0 && (
             <span className="absolute -top-1 -right-1 bg-white text-black text-[10px] font-black w-5 h-5 rounded-full flex items-center justify-center border-2 border-[#060B08] animate-in zoom-in">
-              {carrito.length}
+              {totalArticulosCarrito}
             </span>
           )}
           <span className="hidden md:inline text-xs font-black uppercase tracking-widest">Cuenta</span>
@@ -180,7 +204,6 @@ function MenuContent() {
 
       <div className="relative z-10 max-w-6xl mx-auto px-6 pt-32 pb-32">
         
-        {/* BANNER DE EMERGENCIA OPERATIVA */}
         {!tiendaAbierta && (
           <div className="w-full max-w-xl mx-auto mb-6 bg-red-950/40 border border-red-500/30 p-4 rounded-3xl text-center backdrop-blur-md shadow-2xl animate-in slide-in-from-top-4">
             <p className="text-xs uppercase font-black tracking-widest text-red-400 flex items-center justify-center gap-2">
@@ -210,9 +233,8 @@ function MenuContent() {
 
         <div key={categoria} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
           {productos.map((producto) => {
-            // 🛠️ MOTOR LÓGICO DE DISPONIBILIDAD
             const enHorario = validarHorarioItem(producto.hora_inicio, producto.hora_fin);
-            const hayStock = producto.disponible !== false; // Evalúa la columna del Admin
+            const hayStock = producto.disponible !== false;
             const sePuedeComprar = tiendaAbierta && enHorario && hayStock;
 
             return (
@@ -221,7 +243,6 @@ function MenuContent() {
                   <div className="flex justify-between items-start mb-4">
                     <span className="bg-[#CBA36A]/10 text-[#CBA36A] px-3 py-1 rounded-md text-[8px] font-black uppercase tracking-widest border border-[#CBA36A]/20">{producto.categoria}</span>
                     
-                    {/* 🚦 ETIQUETAS DINÁMICAS DE ESTADO */}
                     {!hayStock ? (
                       <span className="text-[8px] bg-red-950 text-red-500 px-2 py-1 rounded border border-red-500/30 font-black uppercase tracking-widest flex items-center gap-1 shadow-lg">
                         <Ban size={10} /> Agotado
@@ -256,7 +277,6 @@ function MenuContent() {
         {/* MODAL DE PERSONALIZACIÓN */}
         {itemSeleccionado && (
           <div className="fixed inset-0 z-[100] flex items-end md:items-center justify-center bg-black/80 backdrop-blur-sm animate-in fade-in duration-300">
-            {/* El interior del modal se mantiene intacto, ya que interceptamos el error antes de abrirlo */}
             <div className="bg-[#0A130D] border border-[#CBA36A]/30 p-8 rounded-t-[2.5rem] md:rounded-[2.5rem] w-full max-w-md relative animate-in slide-in-from-bottom-10 md:slide-in-from-bottom-0 shadow-[0_0_50px_rgba(203,163,106,0.1)]">
               <button onClick={() => { setItemSeleccionado(null); setExtraDeslactosada(false); setExtraShot(false); setExtraCrema(false); }} className="absolute top-6 right-6 text-white/50 hover:text-white"><X /></button>
               <h2 className="text-3xl font-serif mb-1 text-[#CBA36A]">{itemSeleccionado.nombre}</h2>

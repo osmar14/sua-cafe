@@ -178,7 +178,9 @@ export default function CarritoPage() {
             carrito.map((item, idx) => (
               <div key={idx} className="bg-[#0A130D] p-5 rounded-2xl border border-[#CBA36A]/20 flex justify-between items-center shadow-lg">
                 <div>
-                  <p className="font-bold text-white uppercase text-sm">{item.nombre}</p>
+                  <p className="font-bold text-white uppercase text-sm">
+  {item.cantidad > 1 ? `${item.cantidad}x ` : ''}{item.nombre}
+</p>
                   <p className="text-[10px] text-[#CBA36A] uppercase tracking-widest mt-1">{item.extras_str}</p>
                 </div>
                 <div className="flex items-center gap-4">
